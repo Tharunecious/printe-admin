@@ -161,7 +161,7 @@ export const reorderBanners = async (formdata) =>
 // Toggle banner visibility
 export const toggleBannerVisibility = async (id) => {
   try {
-    await custom_request.put(`${BASE_URL}/banner/${id}/toggle-visibility`,);
+    return await custom_request.put(`${BASE_URL}/banner/${id}/toggle-visibility`);
   } catch (error) {
     throw error;
   }
@@ -170,7 +170,7 @@ export const toggleBannerVisibility = async (id) => {
 // Get visible banners only (for frontend/public)
 export const getVisibleBanners = async () => {
   try {
-    await custom_request.get(`${BASE_URL}/banner/visible`,);
+    return await custom_request.get(`${BASE_URL}/banner/visible`);
   } catch (error) {
     throw error;
   }
@@ -179,7 +179,7 @@ export const getVisibleBanners = async () => {
 // Get banner statistics
 export const getBannerStats = async () => {
   try {
-    await custom_request.get(`${BASE_URL}/banner/stats`,);
+    return await custom_request.get(`${BASE_URL}/banner/stats`);
   } catch (error) {
     throw error;
   }
@@ -296,3 +296,40 @@ export const deleteCoupen = async (id) =>
 export const verifyUser = async (id, data) =>
   await custom_request.put(`${BASE_URL}/client_user/update_client_user/${id}`, data);
 
+// ========== CAMPAIGN APIs ==========
+export const getAllCampaigns = async (search = "") => {
+  return await custom_request.get(`${BASE_URL}/campaign`, {
+    params: search ? { search } : {},
+  });
+};
+
+export const getCampaignById = async (id) => {
+  return await custom_request.get(`${BASE_URL}/campaign/${id}`);
+};
+
+export const createCampaign = async (formData) => {
+  return await custom_request.post(`${BASE_URL}/campaign`, formData);
+};
+
+export const updateCampaign = async (id, formData) => {
+  return await custom_request.put(`${BASE_URL}/campaign/${id}`, formData);
+};
+
+export const deleteCampaign = async (id) => {
+  return await custom_request.delete(`${BASE_URL}/campaign/${id}`);
+};
+
+export const addInterestedPerson = async (campaignId, personData) => {
+  return await custom_request.post(`${BASE_URL}/campaign/${campaignId}/people`, personData);
+};
+
+export const updateInterestedPerson = async (campaignId, personId, personData) => {
+  return await custom_request.put(
+    `${BASE_URL}/campaign/${campaignId}/people/${personId}`,
+    personData
+  );
+};
+
+export const deleteInterestedPerson = async (campaignId, personId) => {
+  return await custom_request.delete(`${BASE_URL}/campaign/${campaignId}/people/${personId}`);
+};

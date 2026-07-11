@@ -29,7 +29,7 @@ export const MENU_DATA = [
   },
 
   {
-    id: 4,
+    id: 2,
     name: "stock-management",
     icon: ICON_HELPER.ORDERS_ICON,
     to: "/stock-management",
@@ -88,6 +88,13 @@ export const MENU_DATA = [
     icon: ICON_HELPER.PRODUCT_ICON,
     to: "/Vendor-product-details",
     special: ["Vendor-product-details"],
+    for: ["super admin"],
+  },{
+    id: 19,
+    name: "Campaign Entries",
+    icon: ICON_HELPER.PRODUCT_ICON,
+    to: "/campaign-entries",
+    special: ["campaign-entries"],
     for: ["super admin"],
   },
 

@@ -35,6 +35,7 @@ import BNIPanel from "../pages/userPanel/BNIPanel";
 import PermissionGuard from "../components/PermissionGuard";
 import OfflineProduct from "../pages/Products/OfflineProduct";
 import ProductCatalogPage from "../pages/Products/ProductCatalogPage";
+import CampaignEntries from "../pages/Campaign/CampaignEntries";
 
 // Wrapper component for permission-protected routes
 const ProtectedRoute = ({ children, pageName }) => (
@@ -501,6 +502,20 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute pageName="dashboard">
             <AdminCreateQuotation />
+          </ProtectedRoute>
+        ),
+      },
+    ],
+  },
+  {
+    path: "/campaign-entries",
+    element: <Layout />,
+    children: [
+      {
+        path: "/campaign-entries",
+        element: (
+          <ProtectedRoute pageName="campaign-entries">
+            <CampaignEntries />
           </ProtectedRoute>
         ),
       },
