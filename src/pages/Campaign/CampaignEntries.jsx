@@ -580,7 +580,6 @@ const CampaignEntries = () => {
               <Form.Item
                 name="name"
                 label="Name"
-                rules={[{ required: true, message: "Name is required" }]}
               >
                 <Input placeholder="e.g. Santhosh" autoFocus />
               </Form.Item>
@@ -597,14 +596,14 @@ const CampaignEntries = () => {
                   },
                 ]}
               >
-                <Input placeholder="e.g. 6379775070" />
+                <Input placeholder="e.g. 737361000" />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item name="place" label="Place">
-                <Input placeholder="e.g. Madukkur" />
+                <Input placeholder="e.g. Trichy" />
               </Form.Item>
             </Col>
             <Col span={12}>
