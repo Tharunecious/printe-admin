@@ -4,6 +4,7 @@ import DefaultTile from "../../components/DefaultTile";
 import { Button, Card, Divider, Empty, Form, Image, Input, Modal, Select, Spin, Switch, Tag, message, DatePicker, Badge, Tooltip } from "antd";
 import ShowImages from "../../helper/ShowImages";
 import UploadHelper from "../../helper/UploadHelper";
+import VideoUploadHelper from "../../helper/VideoUploadHelper";
 import { formValidation } from "../../helper/formvalidation";
 import CustomLabel from "../../components/CustomLabel";
 import { CUSTOM_ERROR_NOTIFICATION, ERROR_NOTIFICATION, SUCCESS_NOTIFICATION } from "../../helper/notification_helper";
@@ -13,7 +14,7 @@ import { ICON_HELPER } from "../../helper/iconhelper";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { HolderOutlined, EyeOutlined, EyeInvisibleOutlined, ClockCircleOutlined, LockOutlined } from '@ant-design/icons';
+import { HolderOutlined, EyeOutlined, EyeInvisibleOutlined, ClockCircleOutlined, LockOutlined, VideoCameraOutlined, DeleteOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { canEditPage, canDeletePage, isSuperAdmin } from "../../helper/permissionHelper";
 
@@ -50,6 +51,7 @@ const Banner = () => {
   const [banners, setAllBanners] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [videoModalUrl, setVideoModalUrl] = useState(null);
 
   const [form] = Form.useForm();
 
@@ -113,6 +115,10 @@ const Banner = () => {
       if (values.expiry_date) {
         values.expiry_date = values.expiry_date.toISOString();
       }
+
+      // Format description and videoUrl
+      values.banner_description = values.banner_description ? values.banner_description.trim() : null;
+      values.videoUrl = values.videoUrl ? values.videoUrl.trim() : null;
 
       let result = "";
 
@@ -181,6 +187,8 @@ const Banner = () => {
         tag: res?.tag || "",
         banner_products: productIds,
         banner_image: res?.banner_image || null,
+        banner_description: res?.banner_description || "",
+        videoUrl: res?.videoUrl || null,
         feature: res?.feature ? res.feature.join(', ') : "",
         is_reward: res?.is_reward || false,
         is_visible: res?.is_visible !== undefined ? res.is_visible : true,
@@ -457,6 +465,19 @@ const Banner = () => {
                                     EXPIRED
                                   </div>
                                 )}
+                                {res.videoUrl && (
+                                  <div 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setVideoModalUrl(res.videoUrl);
+                                    }}
+                                    className="absolute bottom-2 right-2 bg-black/80 hover:bg-black text-white px-2.5 py-1 rounded-full text-xs flex items-center gap-1 cursor-pointer transition-all shadow-md z-10"
+                                    title="Click to play video"
+                                  >
+                                    <PlayCircleOutlined className="text-red-400 text-sm" />
+                                    <span>Watch Video</span>
+                                  </div>
+                                )}
                               </div>
                             }
                           >
@@ -464,16 +485,32 @@ const Banner = () => {
                               title={<h1 className="!font-medium !text-sm">{res?.banner_name}</h1>}
                               description={
                                 <div className="mt-2">
-                                  <div className="mb-2">
+                                  <div className="mb-2 flex flex-wrap gap-1">
                                     <Tag color="blue">{res.tag}</Tag>
                                     {res.is_reward && <Tag color="gold">Reward</Tag>}
                                     {res.rating && <Tag color="green">⭐ {res.rating}</Tag>}
                                     {res.auto_hidden && <Tag color="orange">Auto-Hidden</Tag>}
+                                    {res.videoUrl && (
+                                      <Tag 
+                                        color="purple" 
+                                        icon={<VideoCameraOutlined />} 
+                                        className="cursor-pointer"
+                                        onClick={() => setVideoModalUrl(res.videoUrl)}
+                                      >
+                                        Video
+                                      </Tag>
+                                    )}
                                   </div>
                                   
                                   {res.banner_slug && (
                                     <div className="mt-1">
                                       <Tag color="purple" className="text-xs">/{res.banner_slug}</Tag>
+                                    </div>
+                                  )}
+                                  
+                                  {res.banner_description && (
+                                    <div className="mt-2 text-xs text-gray-600 line-clamp-2" title={res.banner_description}>
+                                      {res.banner_description}
                                     </div>
                                   )}
                                   
@@ -532,7 +569,9 @@ const Banner = () => {
               initialValues={{
                 is_reward: false,
                 is_visible: true,
-                feature: ""
+                feature: "",
+                banner_description: "",
+                videoUrl: null
               }}
             >
               {/* Image Upload Field */}
@@ -557,10 +596,56 @@ const Banner = () => {
                       <Image 
                         src={image} 
                         alt="Banner preview" 
-                        className="max-h-40 object-contain"
+                        className="max-h-40 object-contain rounded"
                       />
                     </div>
                   ) : null;   
+                }}
+              </Form.Item>
+
+              {/* Video Upload Field */}
+              <Form.Item 
+                label={<span className="font-semibold">Banner Video (Optional)</span>}
+                name="videoUrl"
+                tooltip="Upload an optional video for this banner (MP4, WebM, MOV - Max 100MB)"
+              >
+                <VideoUploadHelper 
+                  setVideoPath={(path) => {
+                    form.setFieldsValue({ videoUrl: path });
+                  }}
+                />
+              </Form.Item>
+
+              {/* Show uploaded video preview */}
+              <Form.Item shouldUpdate noStyle>
+                {() => {
+                  const video = form.getFieldValue('videoUrl');
+                  return video ? (
+                    <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                          <VideoCameraOutlined className="text-blue-500" /> Uploaded Video Preview
+                        </span>
+                        <Button 
+                          danger 
+                          type="link" 
+                          size="small" 
+                          icon={<DeleteOutlined />}
+                          onClick={() => form.setFieldsValue({ videoUrl: null })}
+                        >
+                          Remove Video
+                        </Button>
+                      </div>
+                      <video 
+                        src={video} 
+                        controls 
+                        className="w-full max-h-48 rounded bg-black object-contain"
+                      />
+                      <div className="mt-1 text-xs text-gray-400 truncate" title={video}>
+                        {video}
+                      </div>
+                    </div>
+                  ) : null;
                 }}
               </Form.Item>
 
@@ -625,6 +710,20 @@ const Banner = () => {
                   format="YYYY-MM-DD HH:mm"
                   showTime
                   placeholder="Select expiry date and time"
+                />
+              </Form.Item>
+
+              {/* Banner Description */}
+              <Form.Item 
+                label={<span className="font-semibold">Banner Description</span>}
+                name="banner_description"
+                tooltip="Short promotional summary displayed on the banner (up to 250 characters)"
+              >
+                <Input.TextArea 
+                  placeholder="Enter banner description to be shown on the storefront..."
+                  rows={3}
+                  maxLength={250}
+                  showCount
                 />
               </Form.Item>
 
@@ -721,6 +820,30 @@ const Banner = () => {
             </Form>
           </Modal>
         )}
+
+        {/* Video Preview Modal */}
+        <Modal
+          open={Boolean(videoModalUrl)}
+          title="Banner Video Preview"
+          footer={null}
+          onCancel={() => setVideoModalUrl(null)}
+          destroyOnClose
+          width={720}
+        >
+          {videoModalUrl && (
+            <div className="py-2">
+              <video 
+                src={videoModalUrl} 
+                controls 
+                autoPlay 
+                className="w-full max-h-[480px] rounded bg-black object-contain"
+              />
+              <div className="mt-2 text-xs text-gray-500 break-all">
+                Source: <a href={videoModalUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500">{videoModalUrl}</a>
+              </div>
+            </div>
+          )}
+        </Modal>
       </div>
     </Spin>
   );

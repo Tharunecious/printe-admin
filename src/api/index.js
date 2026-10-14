@@ -22,6 +22,8 @@ export const checkloginstatus = async () =>
   await custom_request.get(`${BASE_URL}/auth/check_login`);
 export const uploadImage = async (formdata) =>
   await custom_request.post(`${UPLOAD_BASE_URL}/upload_images`, formdata);
+export const uploadVideo = async (formdata) =>
+  await custom_request.post(`${UPLOAD_BASE_URL}/upload_images`, formdata);
 export const changePassword = async (oldPassword, newPassword) =>
   await custom_request.post(`${BASE_URL}/auth/change_password`, {
     newPassword,
