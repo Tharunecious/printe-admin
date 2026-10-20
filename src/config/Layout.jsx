@@ -15,6 +15,7 @@ const { Sider } = Layout;
 
 const HIDDEN_LAYOUT_ROUTES = [
   "product-catalog",
+  "photobook-editor",
 ];
 
 const App = () => {

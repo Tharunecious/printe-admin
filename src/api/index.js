@@ -335,3 +335,63 @@ export const updateInterestedPerson = async (campaignId, personId, personData) =
 export const deleteInterestedPerson = async (campaignId, personId) => {
   return await custom_request.delete(`${BASE_URL}/campaign/${campaignId}/people/${personId}`);
 };
+
+// ========== PHOTO BOOK TEMPLATE APIs ==========
+export const getPhotoBookTemplates = async (params = {}) => {
+  return await custom_request.get(`${BASE_URL}/photobook/templates`, { params });
+};
+
+export const getPhotoBookTemplateById = async (id) => {
+  return await custom_request.get(`${BASE_URL}/photobook/templates/${id}`);
+};
+
+export const createPhotoBookTemplate = async (data) => {
+  return await custom_request.post(`${BASE_URL}/photobook/templates`, data);
+};
+
+export const updatePhotoBookTemplate = async (id, data) => {
+  return await custom_request.put(`${BASE_URL}/photobook/templates/${id}`, data);
+};
+
+export const duplicatePhotoBookTemplate = async (id) => {
+  return await custom_request.post(`${BASE_URL}/photobook/templates/${id}/duplicate`);
+};
+
+export const publishPhotoBookTemplate = async (id) => {
+  return await custom_request.post(`${BASE_URL}/photobook/templates/${id}/publish`);
+};
+
+export const archivePhotoBookTemplate = async (id) => {
+  return await custom_request.patch(`${BASE_URL}/photobook/templates/${id}/archive`);
+};
+
+export const deletePhotoBookTemplate = async (id) => {
+  return await custom_request.delete(`${BASE_URL}/photobook/templates/${id}`);
+};
+
+export const validatePhotoBookTemplate = async (idOrData) => {
+  if (typeof idOrData === "string") {
+    return await custom_request.post(`${BASE_URL}/photobook/templates/${idOrData}/validate`);
+  }
+  return await custom_request.post(`${BASE_URL}/photobook/templates/validate`, idOrData);
+};
+
+export const getPhotoBookLayouts = async (params = {}) => {
+  return await custom_request.get(`${BASE_URL}/photobook/layouts`, { params });
+};
+
+export const createPhotoBookLayout = async (data) => {
+  return await custom_request.post(`${BASE_URL}/photobook/layouts`, data);
+};
+
+export const deletePhotoBookLayout = async (id) => {
+  return await custom_request.delete(`${BASE_URL}/photobook/layouts/${id}`);
+};
+
+export const getEligiblePhotoBookProducts = async () => {
+  return await custom_request.get(`${BASE_URL}/photobook/eligible-products`);
+};
+
+export const updateProductPhotoBookConfig = async (productId, data) => {
+  return await custom_request.put(`${BASE_URL}/photobook/products/${productId}/photobook-config`, data);
+};

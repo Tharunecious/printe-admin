@@ -36,6 +36,8 @@ import PermissionGuard from "../components/PermissionGuard";
 import OfflineProduct from "../pages/Products/OfflineProduct";
 import ProductCatalogPage from "../pages/Products/ProductCatalogPage";
 import CampaignEntries from "../pages/Campaign/CampaignEntries";
+import TemplateList from "../pages/PhotoBook/TemplateList";
+import PhotoBookEditor from "../pages/PhotoBook/Editor/PhotoBookEditor";
 
 // Wrapper component for permission-protected routes
 const ProtectedRoute = ({ children, pageName }) => (
@@ -516,6 +518,34 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute pageName="campaign-entries">
             <CampaignEntries />
+          </ProtectedRoute>
+        ),
+      },
+    ],
+  },
+  {
+    path: "/photobook-templates",
+    element: <Layout />,
+    children: [
+      {
+        path: "/photobook-templates",
+        element: (
+          <ProtectedRoute pageName="photobook-templates">
+            <TemplateList />
+          </ProtectedRoute>
+        ),
+      },
+    ],
+  },
+  {
+    path: "/photobook-editor/:id",
+    element: <Layout />,
+    children: [
+      {
+        path: "/photobook-editor/:id",
+        element: (
+          <ProtectedRoute pageName="photobook-templates">
+            <PhotoBookEditor />
           </ProtectedRoute>
         ),
       },

@@ -31,6 +31,13 @@ import {
   ArrowDownOutlined,
   LockOutlined,
   UnlockOutlined,
+  BookOutlined,
+  SettingOutlined,
+  SyncOutlined,
+  InfoCircleOutlined,
+  EditOutlined,
+  SwapOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
@@ -49,6 +56,7 @@ import {
   getMainCategory,
   getSubCategory,
   uploadImage,
+  getPhotoBookTemplates,
 } from "../../api";
 import _ from "lodash";
 import {
@@ -88,6 +96,8 @@ const UNIT_TYPE = [
   { value: "gm" }, { value: "kg" }, { value: "lbs" }, { value: "meter" },
   { value: "inches" }, { value: "ft" }, { value: "Nos" }, { value: "Sqft" },
 ];
+
+
 
 const VARIANT_TYPES = [
   { value: "text_box_variant", label: "Text Box Variant" },
@@ -1091,12 +1101,44 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
   });
 
   const [seo_datas, setSEO_Datas] = useState(INITIAL_SEO_DATA);
+  const [publishedTemplates, setPublishedTemplates] = useState([]);
 
   // Watched values
   const productTypeSelectedValue = Form.useWatch('type', form) || (id?.type || PRODUCT_TYPE[0].value);
   const customerPrice = Form.useWatch('customer_product_price', form) || 0;
   const dealerPrice = Form.useWatch('Deler_product_price', form) || 0;
   const corporatePrice = Form.useWatch('corporate_product_price', form) || 0;
+  const watchedSubCategoryId = Form.useWatch('sub_category_details', form);
+
+  // Determine if currently selected subcategory is "Photo Book"
+  const isPhotoBook = useMemo(() => {
+    const currentSubId = watchedSubCategoryId || 
+      (typeof id?.sub_category_details === 'object' ? id?.sub_category_details?._id : id?.sub_category_details);
+    
+    let subCatName = "";
+    if (currentSubId && subcategory_data && subcategory_data.length > 0) {
+      const found = subcategory_data.find(item => String(item._id) === String(currentSubId));
+      if (found && found.sub_category_name) {
+        subCatName = found.sub_category_name;
+      }
+    }
+    
+    if (!subCatName && id?.sub_category_details?.sub_category_name) {
+      subCatName = id.sub_category_details.sub_category_name;
+    }
+    
+    if (subCatName) {
+      const clean = subCatName.toLowerCase().trim();
+      return (
+        clean === "photo book" ||
+        clean === "photo books" ||
+        clean.includes("photo book") ||
+        clean.replace(/\s+/g, "").includes("photobook")
+      );
+    }
+
+    return false;
+  }, [watchedSubCategoryId, subcategory_data, id]);
   
   const variantPrices = Form.useWatch('variants_price', form) || [];
   const watchedMRP = Form.useWatch('MRP_price', form) || 0;
@@ -1135,7 +1177,255 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
   useEffect(() => {
     productCategory();
     collectVendors();
+    getPhotoBookTemplates({ status: "published" })
+      .then((res) => setPublishedTemplates(res.data?.data || []))
+      .catch((err) => console.log("Failed to load templates:", err));
   }, []);
+
+  // Dynamic Photo Book Sizes State (Custom Sizes with Inch <-> CM auto-conversion)
+  const [photoBookSizes, setPhotoBookSizes] = useState([
+    {
+      _id: "size-default-1",
+      name: "8x8 Square",
+      width_in: 8,
+      height_in: 8,
+      width_cm: 20.32,
+      height_cm: 20.32,
+      is_available: true,
+    },
+    {
+      _id: "size-default-2",
+      name: "10x10 Square",
+      width_in: 10,
+      height_in: 10,
+      width_cm: 25.4,
+      height_cm: 25.4,
+      is_available: true,
+    },
+    {
+      _id: "size-default-3",
+      name: "12x12 Deluxe",
+      width_in: 12,
+      height_in: 12,
+      width_cm: 30.48,
+      height_cm: 30.48,
+      is_available: true,
+    },
+  ]);
+
+  // Size Modal State
+  const [isSizeModalOpen, setIsSizeModalOpen] = useState(false);
+  const [editingSizeId, setEditingSizeId] = useState(null);
+  const [sizeFormData, setSizeFormData] = useState({
+    name: "",
+    width_in: "",
+    height_in: "",
+    width_cm: "",
+    height_cm: "",
+    is_available: true,
+  });
+
+  // Dynamic Photo Book Variants State (Title + Values like Basic, Premium)
+  const [photoBookVariants, setPhotoBookVariants] = useState([
+    {
+      _id: "pb-var-1",
+      title: "Edition",
+      values: ["Basic", "Premium"],
+    },
+  ]);
+
+  // Real-time two-way Inch <--> CM conversion
+  const handleWidthInChange = (val) => {
+    const num = parseFloat(val);
+    const cmVal = !isNaN(num) && num > 0 ? parseFloat((num * 2.54).toFixed(2)) : "";
+    setSizeFormData((prev) => {
+      const updated = { ...prev, width_in: val, width_cm: cmVal };
+      if (!prev.name || prev.name.endsWith(" inch") || prev.name.includes("x")) {
+        if (val && prev.height_in) {
+          updated.name = `${val}x${prev.height_in} inch`;
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleWidthCmChange = (val) => {
+    const num = parseFloat(val);
+    const inVal = !isNaN(num) && num > 0 ? parseFloat((num / 2.54).toFixed(2)) : "";
+    setSizeFormData((prev) => {
+      const updated = { ...prev, width_cm: val, width_in: inVal };
+      if (!prev.name || prev.name.endsWith(" inch") || prev.name.includes("x")) {
+        if (inVal && prev.height_in) {
+          updated.name = `${inVal}x${prev.height_in} inch`;
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleHeightInChange = (val) => {
+    const num = parseFloat(val);
+    const cmVal = !isNaN(num) && num > 0 ? parseFloat((num * 2.54).toFixed(2)) : "";
+    setSizeFormData((prev) => {
+      const updated = { ...prev, height_in: val, height_cm: cmVal };
+      if (!prev.name || prev.name.endsWith(" inch") || prev.name.includes("x")) {
+        if (prev.width_in && val) {
+          updated.name = `${prev.width_in}x${val} inch`;
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleHeightCmChange = (val) => {
+    const num = parseFloat(val);
+    const inVal = !isNaN(num) && num > 0 ? parseFloat((num / 2.54).toFixed(2)) : "";
+    setSizeFormData((prev) => {
+      const updated = { ...prev, height_cm: val, height_in: inVal };
+      if (!prev.name || prev.name.endsWith(" inch") || prev.name.includes("x")) {
+        if (prev.width_in && inVal) {
+          updated.name = `${prev.width_in}x${inVal} inch`;
+        }
+      }
+      return updated;
+    });
+  };
+
+  const handleOpenAddSizeModal = () => {
+    setEditingSizeId(null);
+    setSizeFormData({
+      name: "",
+      width_in: "",
+      height_in: "",
+      width_cm: "",
+      height_cm: "",
+      is_available: true,
+    });
+    setIsSizeModalOpen(true);
+  };
+
+  const handleOpenEditSizeModal = (item) => {
+    setEditingSizeId(item._id);
+    setSizeFormData({
+      name: item.name,
+      width_in: item.width_in,
+      height_in: item.height_in,
+      width_cm: item.width_cm,
+      height_cm: item.height_cm,
+      is_available: item.is_available ?? true,
+    });
+    setIsSizeModalOpen(true);
+  };
+
+  const handleSaveSize = () => {
+    if (!sizeFormData.name?.trim()) {
+      message.error("Please enter a size name");
+      return;
+    }
+    if (!sizeFormData.width_in || !sizeFormData.height_in) {
+      message.error("Please enter both width and height");
+      return;
+    }
+
+    if (editingSizeId) {
+      setPhotoBookSizes((prev) =>
+        prev.map((s) => (s._id === editingSizeId ? { ...s, ...sizeFormData } : s))
+      );
+      message.success("Size updated successfully");
+    } else {
+      const newSize = {
+        _id: `size-${Date.now()}-${uuidv4().substring(0, 5)}`,
+        ...sizeFormData,
+      };
+      setPhotoBookSizes((prev) => [...prev, newSize]);
+      message.success("Size created successfully");
+    }
+    setIsSizeModalOpen(false);
+  };
+
+  const handleDeleteSize = (sizeId) => {
+    setPhotoBookSizes((prev) => prev.filter((s) => s._id !== sizeId));
+    message.success("Size removed");
+  };
+
+  const handleToggleSizeAvailability = (sizeId, checked) => {
+    setPhotoBookSizes((prev) =>
+      prev.map((s) => (s._id === sizeId ? { ...s, is_available: checked } : s))
+    );
+  };
+
+  // Dynamic Variant Groups Handlers (Title & Values)
+  const handleAddVariantGroup = () => {
+    const newVar = {
+      _id: `pb-var-${Date.now()}`,
+      title: "",
+      values: ["Basic", "Premium"],
+    };
+    setPhotoBookVariants((prev) => [...prev, newVar]);
+  };
+
+  const handleUpdateVariantTitle = (varId, title) => {
+    setPhotoBookVariants((prev) =>
+      prev.map((v) => (v._id === varId ? { ...v, title } : v))
+    );
+  };
+
+  const handleUpdateVariantValues = (varId, values) => {
+    setPhotoBookVariants((prev) =>
+      prev.map((v) => (v._id === varId ? { ...v, values } : v))
+    );
+  };
+
+  const handleDeleteVariantGroup = (varId) => {
+    setPhotoBookVariants((prev) => prev.filter((v) => v._id !== varId));
+  };
+
+  // Generate Variable Product Pricing Rows from Sizes & Variants
+  const handleSyncPhotoBookVariants = useCallback(() => {
+    const availableSizes = photoBookSizes.filter((s) => s.is_available).map((s) => s.name);
+    if (availableSizes.length === 0) {
+      message.warning("Please make at least one size available to customers before generating pricing rows.");
+      return;
+    }
+
+    const newVariants = [
+      {
+        _id: uuidv4(),
+        variant_name: "Size",
+        variant_type: "text_box_variant",
+        variant_images: [],
+        options: availableSizes.map((s) => ({
+          _id: uuidv4(),
+          value: s,
+          variant_type: "text_box_variant",
+          color_code: "#000000",
+          image_names: [],
+        })),
+      },
+    ];
+
+    photoBookVariants.forEach((v) => {
+      if (v.title && v.values && v.values.length > 0) {
+        newVariants.push({
+          _id: uuidv4(),
+          variant_name: v.title,
+          variant_type: "text_box_variant",
+          variant_images: [],
+          options: v.values.map((val) => ({
+            _id: uuidv4(),
+            value: val,
+            variant_type: "text_box_variant",
+            color_code: "#000000",
+            image_names: [],
+          })),
+        });
+      }
+    });
+
+    setVariants(newVariants);
+    form.setFieldsValue({ type: "Variable Product" });
+    message.success("Generated Variable Pricing rows for Size × Variant combinations!");
+  }, [photoBookSizes, photoBookVariants, form]);
 
   useEffect(() => {
     if (id && categoryData.length > 0 && subcategory_data.length > 0) {
@@ -1159,6 +1449,27 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
 
       form.setFieldsValue(formValues);
       setQuantityType(_.get(id, "quantity_type", ""));
+
+      // Load existing Photo Book sizes and variants if present
+      if (id?.photobook_config?.sizes && Array.isArray(id.photobook_config.sizes)) {
+        setPhotoBookSizes(id.photobook_config.sizes);
+      } else if (id?.photobook_config?.supported_sizes && Array.isArray(id.photobook_config.supported_sizes)) {
+        setPhotoBookSizes(
+          id.photobook_config.supported_sizes.map((s, idx) => ({
+            _id: `size-${idx}-${Date.now()}`,
+            name: s,
+            width_in: s.includes("x") ? parseFloat(s.split("x")[0]) || 8 : 8,
+            height_in: s.includes("x") ? parseFloat(s.split("x")[1]) || 8 : 8,
+            width_cm: s.includes("x") ? parseFloat(((parseFloat(s.split("x")[0]) || 8) * 2.54).toFixed(2)) : 20.32,
+            height_cm: s.includes("x") ? parseFloat(((parseFloat(s.split("x")[1]) || 8) * 2.54).toFixed(2)) : 20.32,
+            is_available: true,
+          }))
+        );
+      }
+
+      if (id?.photobook_config?.variants && Array.isArray(id.photobook_config.variants)) {
+        setPhotoBookVariants(id.photobook_config.variants);
+      }
 
       setSEO_Datas({
         title: _.get(id, "seo_title", ""),
@@ -1996,6 +2307,28 @@ const handleFinish = async (values) => {
     values.seo_img = getFirstAvailableImage(values);
     console.log("SEO Image URL:", values.seo_img);
 
+    // Save Photo Book configuration & status driven by subcategory
+    values.is_photobook = Boolean(isPhotoBook);
+    if (isPhotoBook) {
+      const pbConfig = form.getFieldValue("photobook_config") || values.photobook_config || {};
+      const availableSizeNames = photoBookSizes.filter((s) => s.is_available).map((s) => s.name);
+
+      values.photobook_config = {
+        ...pbConfig,
+        sizes: photoBookSizes,
+        supported_sizes: availableSizeNames.length > 0 ? availableSizeNames : photoBookSizes.map((s) => s.name),
+        variants: photoBookVariants,
+        default_pages: Number(pbConfig.default_pages) || 20,
+        min_pages: Number(pbConfig.min_pages) || 10,
+        max_pages: Number(pbConfig.max_pages) || 60,
+        page_increment: Number(pbConfig.page_increment) || 2,
+        price_per_extra_page: Number(pbConfig.price_per_extra_page) || 0,
+        eligible_template_ids: pbConfig.eligible_template_ids || [],
+      };
+    } else {
+      values.is_photobook = false;
+    }
+
     let result = id
       ? await editProduct(values, id?._id)
       : await addproduct(values);
@@ -2052,7 +2385,7 @@ const handleFinish = async (values) => {
 
       <Form form={form} layout="vertical" onFinish={handleFinish}>
         <Collapse
-          defaultActiveKey={["1", "2", "3", "4", "5", "6", "7"]}
+          defaultActiveKey={["1", "photobook_config", "2", "3", "4", "5", "6", "7"]}
           expandIconPosition="end"
           className="custom-collapse"
         >
@@ -2065,7 +2398,7 @@ const handleFinish = async (values) => {
             }
             key="1"
           >
-            <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole.role == "super admin"?"lg:grid-cols-5":"lg:grid-cols-4"} gap-4`}>
+            <div className={`grid grid-cols-1 md:grid-cols-2 ${userRole.role == "super admin"?"lg:grid-cols-5":"lg:grid-cols-4"} gap-4 mb-4`}>
               {userRole.role == "super admin" && (
               <div className="p-2 bg-blue-50 rounded-lg border">
                 <Form.Item
@@ -2451,6 +2784,348 @@ const handleFinish = async (values) => {
               </Form.Item>
             </div>
           </Panel>
+
+          {/* Photo Book Configuration Panel - Shown when Sub Category is Photo Book */}
+          {isPhotoBook && (
+            <Panel
+              header={
+                <div className="flex md:flex-row flex-col justify-between items-center w-full pr-4">
+                  <span className="text-lg font-semibold relative flex items-center gap-2">
+                    <BookOutlined className="text-teal-600" />
+                    Photo Book Configuration
+                  </span>
+                  <Tag color="cyan" className="font-medium px-3 py-1 rounded-full text-xs">
+                    Subcategory: Photo Book
+                  </Tag>
+                </div>
+              }
+              key="photobook_config"
+            >
+              <div className="space-y-6">
+                {/* Information Header Banner */}
+                <div className="p-4 bg-teal-50/70 border border-teal-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 bg-teal-600 text-white rounded-lg shadow-sm">
+                      <BookOutlined className="text-xl" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-semibold text-teal-950 m-0">
+                        Photo Book Product Specifications
+                      </h4>
+                      <p className="text-xs text-teal-700 m-0 mt-0.5">
+                        Create custom sizes with real-time inch &amp; cm auto-conversion, choose customer availability, and configure custom variants (e.g. Basic, Premium).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="default"
+                      icon={<SyncOutlined />}
+                      onClick={handleSyncPhotoBookVariants}
+                      className="!border-teal-600 !text-teal-700 hover:!bg-teal-50 self-start md:self-center"
+                    >
+                      Generate Variable Pricing Matrix (Size × Variant)
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Section 1: Book Sizes (Full Dynamic CRUD with Inch/CM Auto-Conversion) */}
+                <Card
+                  size="small"
+                  title={
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-800">1. Photo Book Sizes</span>
+                        <Tag color="blue">{photoBookSizes.length} Total Sizes</Tag>
+                        <Tag color="green">
+                          {photoBookSizes.filter((s) => s.is_available).length} Available to Customer
+                        </Tag>
+                      </div>
+                      <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={handleOpenAddSizeModal}
+                        className="!bg-teal-600 hover:!bg-teal-700 text-white"
+                        size="small"
+                      >
+                        Add New Size
+                      </Button>
+                    </div>
+                  }
+                  className="border-gray-200 shadow-sm"
+                >
+                  <div className="space-y-4">
+                    <Table
+                      dataSource={photoBookSizes}
+                      rowKey="_id"
+                      pagination={false}
+                      size="middle"
+                      columns={[
+                        {
+                          title: "Size Name",
+                          dataIndex: "name",
+                          key: "name",
+                          render: (text) => <span className="font-medium text-gray-900">{text}</span>,
+                        },
+                        {
+                          title: "Dimension (Inches)",
+                          key: "inches",
+                          render: (_, r) => (
+                            <span className="text-gray-700 font-mono text-xs">
+                              {r.width_in}&quot; × {r.height_in}&quot;
+                            </span>
+                          ),
+                        },
+                        {
+                          title: "Dimension (Centimeters)",
+                          key: "cm",
+                          render: (_, r) => (
+                            <span className="text-gray-600 font-mono text-xs">
+                              {r.width_cm} × {r.height_cm} cm
+                            </span>
+                          ),
+                        },
+                        {
+                          title: "Available to Customer",
+                          dataIndex: "is_available",
+                          key: "is_available",
+                          render: (is_available, record) => (
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={is_available ?? true}
+                                onChange={(checked) =>
+                                  handleToggleSizeAvailability(record._id, checked)
+                                }
+                                checkedChildren="Available"
+                                unCheckedChildren="Hidden"
+                              />
+                            </div>
+                          ),
+                        },
+                        {
+                          title: "Actions",
+                          key: "actions",
+                          width: 120,
+                          render: (_, record) => (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="text"
+                                icon={<EditOutlined className="text-blue-500" />}
+                                onClick={() => handleOpenEditSizeModal(record)}
+                                size="small"
+                              />
+                              <Button
+                                type="text"
+                                danger
+                                icon={<DeleteFilled />}
+                                onClick={() => handleDeleteSize(record._id)}
+                                size="small"
+                              />
+                            </div>
+                          ),
+                        },
+                      ]}
+                    />
+
+                    {/* Quick customer availability selector badges */}
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                      <div className="text-xs text-gray-600">
+                        <span className="font-medium">Customer Selection: </span>
+                        Click a size tag to toggle whether customers can choose it on the storefront:
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {photoBookSizes.map((s) => (
+                          <Tag.CheckableTag
+                            key={s._id}
+                            checked={s.is_available ?? true}
+                            onChange={(checked) => handleToggleSizeAvailability(s._id, checked)}
+                            className="cursor-pointer font-medium py-0.5 px-2.5 rounded text-xs"
+                          >
+                            {s.is_available ? "✓ " : "✕ "} {s.name} ({s.width_in}&quot;×{s.height_in}&quot;)
+                          </Tag.CheckableTag>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Section 2: Photo Book Variants (Title and Values like Basic, Premium) */}
+                <Card
+                  size="small"
+                  title={
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-800">2. Photo Book Variants</span>
+                        <span className="text-xs text-gray-500 font-normal">
+                          (Define a variant Title and values like Basic, Premium)
+                        </span>
+                      </div>
+                      <Button
+                        type="dashed"
+                        icon={<PlusOutlined />}
+                        onClick={handleAddVariantGroup}
+                        size="small"
+                      >
+                        Add Variant Group
+                      </Button>
+                    </div>
+                  }
+                  className="border-gray-200 shadow-sm"
+                >
+                  <div className="space-y-4">
+                    {photoBookVariants.map((v, index) => (
+                      <div
+                        key={v._id}
+                        className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-teal-800 uppercase tracking-wide">
+                            Variant Group #{index + 1}
+                          </span>
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteFilled />}
+                            onClick={() => handleDeleteVariantGroup(v._id)}
+                            size="small"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Variant Title <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              placeholder="e.g. Edition, Quality Tier, Book Style"
+                              value={v.title}
+                              onChange={(e) => handleUpdateVariantTitle(v._id, e.target.value)}
+                              className="h-10"
+                            />
+                            <span className="text-[11px] text-gray-400">
+                              Title displayed to customers (e.g. Edition)
+                            </span>
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Variant Values / Options <span className="text-red-500">*</span>
+                            </label>
+                            <Select
+                              mode="tags"
+                              className="w-full min-h-[40px]"
+                              placeholder="Type option name (e.g. Basic, Premium, Deluxe) and press Enter"
+                              value={v.values}
+                              onChange={(vals) => handleUpdateVariantValues(v._id, vals)}
+                              tokenSeparators={[","]}
+                            />
+                            <span className="text-[11px] text-gray-400">
+                              Add choices for this variant (e.g. Basic, Premium, Deluxe)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {photoBookVariants.length === 0 && (
+                      <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                        <p className="text-gray-500 text-sm mb-3">No variants added yet.</p>
+                        <Button
+                          type="primary"
+                          icon={<PlusOutlined />}
+                          onClick={handleAddVariantGroup}
+                          className="!bg-teal-600 hover:!bg-teal-700"
+                        >
+                          Add Variant (e.g. Edition: Basic, Premium)
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                {/* Section 3: Page Limits & Settings */}
+                <Card
+                  size="small"
+                  title={
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-800">3. Page Limits &amp; Pricing Surcharges</span>
+                    </div>
+                  }
+                  className="border-gray-200 shadow-sm"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <Form.Item
+                      name={["photobook_config", "default_pages"]}
+                      label={<span className="font-medium text-gray-700">Default Pages</span>}
+                      initialValue={20}
+                    >
+                      <InputNumber min={10} max={100} className="w-full h-10" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name={["photobook_config", "min_pages"]}
+                      label={<span className="font-medium text-gray-700">Minimum Allowed</span>}
+                      initialValue={10}
+                    >
+                      <InputNumber min={10} max={60} className="w-full h-10" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name={["photobook_config", "max_pages"]}
+                      label={<span className="font-medium text-gray-700">Maximum Allowed</span>}
+                      initialValue={60}
+                    >
+                      <InputNumber min={20} max={200} className="w-full h-10" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name={["photobook_config", "page_increment"]}
+                      label={<span className="font-medium text-gray-700">Page Step (Sheet)</span>}
+                      initialValue={2}
+                    >
+                      <InputNumber min={1} max={10} className="w-full h-10" />
+                    </Form.Item>
+
+                    <Form.Item
+                      name={["photobook_config", "price_per_extra_page"]}
+                      label={<span className="font-medium text-gray-700">Extra Page Cost (₹)</span>}
+                      initialValue={15}
+                    >
+                      <InputNumber min={0} step={1} className="w-full h-10" />
+                    </Form.Item>
+                  </div>
+                </Card>
+
+                {/* Section 4: Eligible Published Templates */}
+                <Card
+                  size="small"
+                  title={
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-800">4. Eligible Published Canva-like Templates</span>
+                      <span className="text-xs text-gray-500 font-normal">
+                        (Select which templates can be customized for this product)
+                      </span>
+                    </div>
+                  }
+                  className="border-gray-200 shadow-sm"
+                >
+                  <Form.Item
+                    name={["photobook_config", "eligible_template_ids"]}
+                    label={<span className="font-medium text-gray-700">Linked Published Templates</span>}
+                    className="mb-0"
+                  >
+                    <Select
+                      mode="multiple"
+                      placeholder="Select eligible published templates"
+                      className="w-full min-h-[40px]"
+                      options={publishedTemplates.map((t) => ({
+                        value: t.template_id,
+                        label: `${t.template_name} (${t.template_id}) — ${t.total_pages || t.pages?.length || 20} Pages`,
+                      }))}
+                    />
+                  </Form.Item>
+                </Card>
+              </div>
+            </Panel>
+          )}
 
           {/* Stock Info Panel */}
           <Panel
@@ -3395,6 +4070,122 @@ const handleFinish = async (values) => {
         )}
       </Form.List>
     </Form>
+  </Modal>
+
+  {/* Create / Edit Photo Book Size Modal with Real-Time Inch/CM Auto-Conversion */}
+  <Modal
+    title={
+      <div className="flex items-center gap-2 text-teal-800 font-semibold">
+        <BookOutlined />
+        <span>{editingSizeId ? "Edit Photo Book Size" : "Create New Photo Book Size"}</span>
+      </div>
+    }
+    open={isSizeModalOpen}
+    onOk={handleSaveSize}
+    onCancel={() => setIsSizeModalOpen(false)}
+    okText={editingSizeId ? "Update Size" : "Create Size"}
+    okButtonProps={{ className: "!bg-teal-600 hover:!bg-teal-700 text-white" }}
+    width={520}
+  >
+    <div className="space-y-4 py-2">
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 mb-1">
+          Size Name <span className="text-red-500">*</span>
+        </label>
+        <Input
+          placeholder="e.g. 8x8 Square, A4 Portrait, Pocket Mini"
+          value={sizeFormData.name}
+          onChange={(e) => setSizeFormData((prev) => ({ ...prev, name: e.target.value }))}
+          className="h-10"
+        />
+      </div>
+
+      <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+            Dimensions &amp; Auto-Conversion
+          </span>
+          <span className="text-[11px] text-teal-600 font-medium">1 in = 2.54 cm</span>
+        </div>
+
+        {/* Width: Inch <--> CM */}
+        <div>
+          <label className="block text-xs text-gray-600 mb-1 font-medium">
+            Width <span className="text-red-500">*</span>
+          </label>
+          <div className="grid grid-cols-11 items-center gap-2">
+            <div className="col-span-5">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Inches"
+                value={sizeFormData.width_in}
+                onChange={(e) => handleWidthInChange(e.target.value)}
+                addonAfter="in"
+                className="w-full"
+              />
+            </div>
+            <div className="col-span-1 text-center text-teal-600 font-bold">⇄</div>
+            <div className="col-span-5">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Centimeters"
+                value={sizeFormData.width_cm}
+                onChange={(e) => handleWidthCmChange(e.target.value)}
+                addonAfter="cm"
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Height: Inch <--> CM */}
+        <div>
+          <label className="block text-xs text-gray-600 mb-1 font-medium">
+            Height <span className="text-red-500">*</span>
+          </label>
+          <div className="grid grid-cols-11 items-center gap-2">
+            <div className="col-span-5">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Inches"
+                value={sizeFormData.height_in}
+                onChange={(e) => handleHeightInChange(e.target.value)}
+                addonAfter="in"
+                className="w-full"
+              />
+            </div>
+            <div className="col-span-1 text-center text-teal-600 font-bold">⇄</div>
+            <div className="col-span-5">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Centimeters"
+                value={sizeFormData.height_cm}
+                onChange={(e) => handleHeightCmChange(e.target.value)}
+                addonAfter="cm"
+                className="w-full"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between p-3 bg-teal-50/60 rounded-lg border border-teal-200">
+        <div>
+          <div className="text-xs font-semibold text-teal-900">Available to Customers</div>
+          <div className="text-[11px] text-teal-700">Allow customers to choose this size when purchasing</div>
+        </div>
+        <Switch
+          checked={sizeFormData.is_available}
+          onChange={(checked) => setSizeFormData((prev) => ({ ...prev, is_available: checked }))}
+          checkedChildren="Yes"
+          unCheckedChildren="No"
+        />
+      </div>
+    </div>
   </Modal>
 
   <style jsx>{`

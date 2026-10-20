@@ -89,13 +89,22 @@ export const MENU_DATA = [
     to: "/Vendor-product-details",
     special: ["Vendor-product-details"],
     for: ["super admin"],
-  },{
+  },
+  {
     id: 19,
     name: "Campaign Entries",
     icon: ICON_HELPER.PRODUCT_ICON,
     to: "/campaign-entries",
     special: ["campaign-entries"],
     for: ["super admin"],
+  },
+  {
+    id: 20,
+    name: "Photo Books",
+    icon: ICON_HELPER.BANNER_ICON,
+    to: "/photobook-templates",
+    special: ["photobook-templates"],
+    for: ["super admin", "designing team", "Frontend admin"],
   },
 
   // {
