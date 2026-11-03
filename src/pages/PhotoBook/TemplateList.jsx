@@ -6,9 +6,8 @@ import {
   duplicatePhotoBookTemplate,
   archivePhotoBookTemplate,
   deletePhotoBookTemplate,
-  getEligiblePhotoBookProducts,
-  updateProductPhotoBookConfig,
   updatePhotoBookTemplate,
+  getAvailableProductTemplates,
 } from "../../api";
 import {
   Button,
@@ -24,6 +23,7 @@ import {
   message,
   Dropdown,
   Tooltip,
+  Alert,
 } from "antd";
 import {
   MdAdd,
@@ -35,9 +35,9 @@ import {
   MdDeleteOutline,
   MdEdit,
   MdOutlineAutoStories,
-  MdLink,
   MdGridView,
   MdFilterList,
+  MdOpenInNew,
 } from "react-icons/md";
 import BookPreviewModal from "./BookPreviewModal";
 
@@ -53,7 +53,7 @@ const CATEGORIES = [
   "General",
 ];
 
-const BOOK_SIZES = ["8x8", "10x10", "12x12", "8.5x11", "A4"];
+const BOOK_SIZES = ["A4", "A5", "12x12 inch", "A3", "A4 V", "Square"];
 
 const TemplateList = () => {
   const navigate = useNavigate();
@@ -68,16 +68,67 @@ const TemplateList = () => {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createForm] = Form.useForm();
   const [creating, setCreating] = useState(false);
+  const [productTemplates, setProductTemplates] = useState([]);
+  const [loadingProductTemplates, setLoadingProductTemplates] = useState(false);
+  const [selectedProductTemplate, setSelectedProductTemplate] = useState(null);
 
   // Preview Modal
   const [previewTemplate, setPreviewTemplate] = useState(null);
 
-  // Product Link Modal
-  const [linkModalOpen, setLinkModalOpen] = useState(false);
-  const [currentLinkingTemplate, setCurrentLinkingTemplate] = useState(null);
-  const [allProducts, setAllProducts] = useState([]);
-  const [selectedProductIds, setSelectedProductIds] = useState([]);
-  const [savingLinks, setSavingLinks] = useState(false);
+  // Open Create Modal & load product templates
+  const handleOpenCreateModal = async () => {
+    setCreateModalOpen(true);
+    setSelectedProductTemplate(null);
+    createForm.resetFields();
+    createForm.setFieldsValue({
+      category: "Wedding",
+      supported_sizes: ["A4", "A5", "12x12 inch", "A3"],
+      default_pages: 20,
+      min_pages: 10,
+      max_pages: 60,
+      aspect_ratio: "1:1",
+    });
+
+    try {
+      setLoadingProductTemplates(true);
+      const res = await getAvailableProductTemplates();
+      setProductTemplates(res.data?.data || []);
+    } catch (err) {
+      console.error("Error loading product templates:", err);
+      message.error("Failed to load available product template configurations");
+    } finally {
+      setLoadingProductTemplates(false);
+    }
+  };
+
+  const handleSelectProductTemplate = (selectedVal) => {
+    if (!selectedVal) {
+      setSelectedProductTemplate(null);
+      return;
+    }
+    const found = productTemplates.find(
+      (t) =>
+        String(t.product_template_id) === String(selectedVal) ||
+        String(t.slug) === String(selectedVal) ||
+        String(t.template_id) === String(selectedVal)
+    );
+    if (found) {
+      setSelectedProductTemplate(found);
+      createForm.setFieldsValue({
+        template_name: found.template_name || "",
+        template_id: found.slug || found.template_id || "",
+        category: found.category || "General",
+        description: found.description || "",
+        supported_sizes:
+          Array.isArray(found.supported_sizes) && found.supported_sizes.length > 0
+            ? found.supported_sizes
+            : ["A4", "A5", "12x12 inch", "A3"],
+        default_pages: found.default_pages || 20,
+        min_pages: found.min_pages || 10,
+        max_pages: found.max_pages || 60,
+      });
+    }
+  };
 
   // Fetch Templates
   const fetchTemplates = async () => {
@@ -98,23 +149,9 @@ const TemplateList = () => {
     }
   };
 
-  // Fetch Products for Linking
-  const fetchProducts = async () => {
-    try {
-      const res = await getEligiblePhotoBookProducts();
-      setAllProducts(res.data?.data || []);
-    } catch (err) {
-      console.error("Error fetching products:", err);
-    }
-  };
-
   useEffect(() => {
     fetchTemplates();
   }, [search, selectedCategory, selectedStatus]);
-
-  useEffect(() => {
-    fetchProducts();
-  }, []);
 
   // Statistics counts
   const stats = useMemo(() => {
@@ -127,30 +164,52 @@ const TemplateList = () => {
 
   // Handle Create Template
   const handleCreate = async (values) => {
+    if (!selectedProductTemplate) {
+      message.error("Please select a template configuration from the Custom Photo Book product to proceed.");
+      return;
+    }
+
+    if (selectedProductTemplate?.has_design) {
+      message.warning("A visual design already exists for this template. Please open and edit the existing design.");
+      return;
+    }
+
     try {
       setCreating(true);
+      const targetSlug =
+        values.template_id ||
+        selectedProductTemplate?.slug ||
+        selectedProductTemplate?.template_id ||
+        `pb_${values.template_name
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "_")}_${Date.now().toString().slice(-4)}`;
+
       const payload = {
-        template_name: values.template_name,
-        template_id:
-          values.template_id ||
-          `pb_${values.template_name
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, "_")}_${Date.now().toString().slice(-4)}`,
-        category: values.category || "General",
-        description: values.description || "",
-        supported_sizes: values.supported_sizes || ["8x8", "10x10", "12x12"],
+        template_name: values.template_name || selectedProductTemplate.template_name,
+        template_id: targetSlug,
+        category: values.category || selectedProductTemplate?.category || "General",
+        badge: selectedProductTemplate?.badge || "",
+        description: values.description || selectedProductTemplate?.description || "",
+        thumbnail_url:
+          selectedProductTemplate?.cover_image_url || selectedProductTemplate?.thumbnail_url || "",
+        cover_image_url:
+          selectedProductTemplate?.cover_image_url || selectedProductTemplate?.thumbnail_url || "",
+        product_id: selectedProductTemplate?.product_id || null,
+        product_template_id: selectedProductTemplate?.product_template_id || selectedProductTemplate?.slug || null,
+        supported_sizes: values.supported_sizes || selectedProductTemplate?.supported_sizes || ["A4", "A5", "12x12 inch", "A3"],
         page_config: {
-          min_pages: values.min_pages || 10,
-          max_pages: values.max_pages || 60,
-          default_pages: values.default_pages || 20,
+          min_pages: Number(values.min_pages || selectedProductTemplate?.min_pages || 10),
+          max_pages: Number(values.max_pages || selectedProductTemplate?.max_pages || 60),
+          default_pages: Number(values.default_pages || selectedProductTemplate?.default_pages || 20),
           aspect_ratio: values.aspect_ratio || "1:1",
         },
       };
 
       const res = await createPhotoBookTemplate(payload);
-      message.success("Template created successfully!");
+      message.success("Template design created successfully!");
       setCreateModalOpen(false);
       createForm.resetFields();
+      setSelectedProductTemplate(null);
       fetchTemplates();
 
       // Open visual editor directly for the new template
@@ -202,46 +261,6 @@ const TemplateList = () => {
     }
   };
 
-  // Open Link Products Modal
-  const openLinkModal = (template) => {
-    setCurrentLinkingTemplate(template);
-    const linkedIds = (template.eligible_product_ids || []).map((p) =>
-      typeof p === "object" ? p._id : p
-    );
-    setSelectedProductIds(linkedIds);
-    setLinkModalOpen(true);
-  };
-
-  // Save Product Links
-  const handleSaveProductLinks = async () => {
-    if (!currentLinkingTemplate) return;
-    try {
-      setSavingLinks(true);
-      await updatePhotoBookTemplate(currentLinkingTemplate._id, {
-        eligible_product_ids: selectedProductIds,
-      });
-
-      // Also set is_photobook: true on selected products
-      for (const prodId of selectedProductIds) {
-        await updateProductPhotoBookConfig(prodId, {
-          is_photobook: true,
-          photobook_config: {
-            eligible_template_ids: [currentLinkingTemplate.template_id],
-          },
-        });
-      }
-
-      message.success("Associated products updated successfully!");
-      setLinkModalOpen(false);
-      fetchTemplates();
-    } catch (err) {
-      console.error("Link products error:", err);
-      message.error("Failed to link products");
-    } finally {
-      setSavingLinks(false);
-    }
-  };
-
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       {/* Top Header */}
@@ -259,17 +278,7 @@ const TemplateList = () => {
         <Button
           type="primary"
           icon={<MdAdd size={18} />}
-          onClick={() => {
-            createForm.setFieldsValue({
-              category: "Wedding",
-              supported_sizes: ["8x8", "10x10", "12x12"],
-              default_pages: 20,
-              min_pages: 10,
-              max_pages: 60,
-              aspect_ratio: "1:1",
-            });
-            setCreateModalOpen(true);
-          }}
+          onClick={handleOpenCreateModal}
           className="!bg-teal-600 hover:!bg-teal-700 !border-teal-600 font-semibold shadow-sm"
         >
           Create New Template
@@ -458,15 +467,18 @@ const TemplateList = () => {
                       <span>
                         <strong>{tpl.pages?.length || 0}</strong> Designed Pages
                       </span>
-                      <button
-                        onClick={() => openLinkModal(tpl)}
-                        className="text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1 text-[11px]"
-                      >
-                        <MdLink size={14} />
-                        <span>
-                          {tpl.eligible_product_ids?.length || 0} Linked Products
+                      {tpl.product_template_id ? (
+                        <span
+                          className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 truncate max-w-[160px]"
+                          title={`Linked Template Config: ${tpl.product_template_id}`}
+                        >
+                          Config: {tpl.product_template_id}
                         </span>
-                      </button>
+                      ) : (
+                        <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          Unlinked
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -479,8 +491,21 @@ const TemplateList = () => {
                       onClick={() => navigate(`/photobook-editor/${tpl._id}`)}
                       className="flex-1 !bg-teal-600 hover:!bg-teal-700 !border-teal-600 font-medium text-xs"
                     >
-                      Design
+                      Edit Design
                     </Button>
+
+                    {tpl.product_id && (
+                      <Tooltip title="Edit commercial pricing, sizes & editions in Product">
+                        <Button
+                          size="small"
+                          icon={<MdOpenInNew size={14} />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`/edit-product/${tpl.product_id}`, "_blank");
+                          }}
+                        />
+                      </Tooltip>
+                    )}
 
                     <Tooltip title="Preview Book">
                       <Button
@@ -540,140 +565,236 @@ const TemplateList = () => {
 
       {/* ==================== CREATE TEMPLATE MODAL ==================== */}
       <Modal
-        title="Create New Photo Book Template"
+        title="Create New Photo Book Template Design"
         open={createModalOpen}
         onCancel={() => setCreateModalOpen(false)}
         footer={null}
-        width={550}
+        width={680}
+        destroyOnClose
       >
-        <Form
-          form={createForm}
-          layout="vertical"
-          onFinish={handleCreate}
-          className="space-y-3 pt-2"
-        >
-          <Form.Item
-            name="template_name"
-            label="Template Name"
-            rules={[{ required: true, message: "Template name is required" }]}
-          >
-            <Input placeholder="e.g. Royal Vintage Wedding Book" />
-          </Form.Item>
+        <div className="space-y-4 pt-1">
+          {/* Step 1: Assign to an existing Product Template record (Mandatory) */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-800">
+                1. Select Product Template Configuration <span className="text-red-500">*</span>
+              </label>
+              <span className="text-[11px] text-teal-700 font-semibold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                Required to start designing
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-2.5">
+              Select an available template configuration created under <strong>Admin → Products</strong> to build its visual layout and pages.
+            </p>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Form.Item name="template_id" label="Unique Identifier (Slug)">
-              <Input placeholder="e.g. pb_wedding_royal_01" />
-            </Form.Item>
-
-            <Form.Item name="category" label="Category">
-              <Select
-                options={CATEGORIES.filter((c) => c !== "All").map((c) => ({
-                  value: c,
-                  label: c,
-                }))}
-              />
-            </Form.Item>
-          </div>
-
-          <Form.Item name="description" label="Description">
-            <Input.TextArea
-              rows={2}
-              placeholder="Describe the aesthetic and recommended occasions for this book..."
-            />
-          </Form.Item>
-
-          <Form.Item name="supported_sizes" label="Supported Book Sizes">
-            <Checkbox.Group options={BOOK_SIZES} />
-          </Form.Item>
-
-          <div className="grid grid-cols-3 gap-3">
-            <Form.Item name="default_pages" label="Default Pages">
-              <Input type="number" min={10} max={100} />
-            </Form.Item>
-            <Form.Item name="min_pages" label="Min Pages">
-              <Input type="number" min={10} max={50} />
-            </Form.Item>
-            <Form.Item name="max_pages" label="Max Pages">
-              <Input type="number" min={20} max={100} />
-            </Form.Item>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3">
-            <Button onClick={() => setCreateModalOpen(false)}>Cancel</Button>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={creating}
-              className="!bg-teal-600 !border-teal-600"
+            <Select
+              placeholder="Search and choose a product template configuration..."
+              loading={loadingProductTemplates}
+              allowClear
+              className="w-full"
+              onChange={handleSelectProductTemplate}
+              value={selectedProductTemplate?.product_template_id || selectedProductTemplate?.slug || undefined}
+              dropdownMatchSelectWidth={false}
+              optionLabelProp="label"
             >
-              Create & Open Editor
-            </Button>
-          </div>
-        </Form>
-      </Modal>
-
-      {/* ==================== PRODUCT LINK MODAL ==================== */}
-      <Modal
-        title={`Associate Products with "${currentLinkingTemplate?.template_name}"`}
-        open={linkModalOpen}
-        onCancel={() => setLinkModalOpen(false)}
-        onOk={handleSaveProductLinks}
-        confirmLoading={savingLinks}
-        okText="Save Product Associations"
-        width={600}
-      >
-        <div className="space-y-3 py-2">
-          <p className="text-xs text-slate-500">
-            Select which Photo Book products in the store can use this published
-            template.
-          </p>
-
-          <div className="max-h-72 overflow-y-auto space-y-2 border border-slate-200 rounded-lg p-3">
-            {allProducts.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-4">
-                No products found.
-              </p>
-            ) : (
-              allProducts.map((prod) => {
-                const isChecked = selectedProductIds.includes(prod._id);
-                return (
-                  <div
-                    key={prod._id}
-                    onClick={() => {
-                      if (isChecked) {
-                        setSelectedProductIds((prev) =>
-                          prev.filter((id) => id !== prod._id)
-                        );
-                      } else {
-                        setSelectedProductIds((prev) => [...prev, prod._id]);
-                      }
-                    }}
-                    className={`p-2.5 rounded-lg border flex items-center justify-between cursor-pointer transition-colors ${
-                      isChecked
-                        ? "bg-teal-50 border-teal-500 text-teal-900"
-                        : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Checkbox checked={isChecked} />
-                      <div>
-                        <span className="text-xs font-semibold block">
-                          {prod.name}
+              {productTemplates.map((tpl) => (
+                <Select.Option
+                  key={tpl.product_template_id || tpl.slug}
+                  value={tpl.product_template_id || tpl.slug}
+                  label={`${tpl.template_name} (${tpl.slug}) - ${tpl.product_name}`}
+                >
+                  <div className="flex items-center gap-3 py-1.5 border-b border-slate-100 last:border-b-0">
+                    {tpl.cover_image_url || tpl.thumbnail_url ? (
+                      <img
+                        src={tpl.cover_image_url || tpl.thumbnail_url}
+                        alt={tpl.template_name}
+                        className="w-10 h-10 rounded object-cover border border-slate-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-400 text-[10px] shrink-0 font-medium">
+                        Cover
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-slate-900 text-xs">
+                          {tpl.template_name}
                         </span>
-                        <span className="text-[10px] text-slate-400">
-                          Code: {prod.product_code || "N/A"} • Price: ₹
-                          {prod.MRP_price || 0}
-                        </span>
+                        {tpl.badge && (
+                          <Tag color="orange" className="text-[9px] m-0 leading-tight">
+                            {tpl.badge}
+                          </Tag>
+                        )}
+                        {tpl.category && (
+                          <Tag color="cyan" className="text-[9px] m-0 leading-tight">
+                            {tpl.category}
+                          </Tag>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500 font-mono">
+                        <span>slug: {tpl.slug}</span>
+                        <span>•</span>
+                        <span className="text-slate-600 font-sans">Product: {tpl.product_name}</span>
                       </div>
                     </div>
-                    {prod.is_photobook && (
-                      <Tag color="cyan">Photo Book</Tag>
-                    )}
+                    <div>
+                      {tpl.has_design ? (
+                        <Tag color="purple" className="text-[10px] m-0 font-medium">
+                          Design Exists ({tpl.design_status})
+                        </Tag>
+                      ) : (
+                        <Tag color="green" className="text-[10px] m-0 font-medium">
+                          Available
+                        </Tag>
+                      )}
+                    </div>
                   </div>
-                );
-              })
-            )}
+                </Select.Option>
+              ))}
+            </Select>
           </div>
+
+          {!selectedProductTemplate && (
+            <Alert
+              type="info"
+              showIcon
+              message="Template Configuration Required"
+              description="Please select an available template configuration above to enable the visual template designer. Visual designs must be associated with an active template configuration from the Custom Photo Book product."
+            />
+          )}
+
+          {/* Duplicate Detection Alert */}
+          {selectedProductTemplate?.has_design && (
+            <Alert
+              type="warning"
+              showIcon
+              message="Visual Design Already Exists"
+              description={
+                <div className="space-y-2 mt-1">
+                  <p className="text-xs text-slate-700 m-0">
+                    A visual template design is already created for{" "}
+                    <strong>{selectedProductTemplate.template_name}</strong> (Status:{" "}
+                    <Tag
+                      color={
+                        selectedProductTemplate.design_status === "published"
+                          ? "green"
+                          : "orange"
+                      }
+                      className="text-[10px] font-semibold"
+                    >
+                      {selectedProductTemplate.design_status}
+                    </Tag>
+                    , Version: {selectedProductTemplate.design_version || 1}). Each template configuration can only have one active visual design to prevent discrepancies.
+                  </p>
+                  <Button
+                    type="primary"
+                    className="!bg-amber-600 hover:!bg-amber-700 text-xs font-semibold"
+                    onClick={() => {
+                      setCreateModalOpen(false);
+                      navigate(`/photobook-editor/${selectedProductTemplate.design_id}`);
+                    }}
+                  >
+                    Open & Edit Existing Design
+                  </Button>
+                </div>
+              }
+            />
+          )}
+
+          {/* Form - Only enabled when template configuration is selected and has no existing design */}
+          {selectedProductTemplate && !selectedProductTemplate.has_design && (
+            <Form
+              form={createForm}
+              layout="vertical"
+              onFinish={handleCreate}
+              className="space-y-3"
+            >
+              {/* Linked Configuration Summary Banner */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 space-y-1">
+                <div className="font-semibold flex items-center justify-between">
+                  <span>Linked Commercial Configuration:</span>
+                  <Tag color="green" className="m-0 text-[10px]">
+                    Product: {selectedProductTemplate.product_name}
+                  </Tag>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-emerald-800">
+                  <span>Pages: {selectedProductTemplate.default_pages} default ({selectedProductTemplate.min_pages}–{selectedProductTemplate.max_pages})</span>
+                  <span>•</span>
+                  <span>Extra page: ₹{selectedProductTemplate.price_per_extra_page}</span>
+                  <span>•</span>
+                  <span>{selectedProductTemplate.editions?.length || 0} Edition(s)</span>
+                </div>
+              </div>
+
+              <Form.Item
+                name="template_name"
+                label="Template Name"
+                rules={[{ required: true, message: "Template name is required" }]}
+              >
+                <Input placeholder="e.g. Royal Vintage Wedding Book" />
+              </Form.Item>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Form.Item
+                  name="template_id"
+                  label="Unique Identifier (Slug)"
+                  extra="Must match the product template slug."
+                >
+                  <Input placeholder="e.g. wedding-book" />
+                </Form.Item>
+
+                <Form.Item name="category" label="Category">
+                  <Select
+                    options={CATEGORIES.filter((c) => c !== "All").map((c) => ({
+                      value: c,
+                      label: c,
+                    }))}
+                  />
+                </Form.Item>
+              </div>
+
+              <Form.Item name="description" label="Description">
+                <Input.TextArea
+                  rows={2}
+                  placeholder="Describe the aesthetic and recommended occasions for this book..."
+                />
+              </Form.Item>
+
+              <Form.Item name="supported_sizes" label="Supported Book Sizes">
+                <Checkbox.Group options={BOOK_SIZES} />
+              </Form.Item>
+
+              <div className="grid grid-cols-3 gap-3">
+                <Form.Item name="default_pages" label="Default Pages">
+                  <Input type="number" min={10} max={100} />
+                </Form.Item>
+                <Form.Item name="min_pages" label="Min Pages">
+                  <Input type="number" min={10} max={50} />
+                </Form.Item>
+                <Form.Item name="max_pages" label="Max Pages">
+                  <Input type="number" min={20} max={100} />
+                </Form.Item>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  loading={creating}
+                  className="!bg-teal-600 !border-teal-600"
+                >
+                  Create & Open Editor
+                </Button>
+              </div>
+            </Form>
+          )}
+
+          {(!selectedProductTemplate || selectedProductTemplate.has_design) && (
+            <div className="flex justify-end pt-3 border-t border-slate-100">
+              <Button onClick={() => setCreateModalOpen(false)}>Close</Button>
+            </div>
+          )}
         </div>
       </Modal>
 

@@ -11,13 +11,32 @@ import { ICON_HELPER } from "../../helper/iconhelper";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { IMAGE_HELPER } from "../../helper/imagehelper";
+import { MdOutlineAutoStories } from "react-icons/md";
+import PhotoBookOrderPreviewModal from "./PhotoBookOrderPreviewModal";
 
 const OrderExplore = () => {
   const [orderData, setOrderData] = useState([]);
   const [subtotal, setSubtotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [isPhotobookPreviewVisible, setIsPhotobookPreviewVisible] = useState(false);
   const location = useLocation();
   const order_id = location.state;
+
+  const isPhotobookOrder = (order) => {
+    if (!order) return false;
+    const item = Array.isArray(order.cart_items) ? order.cart_items[0] : order.cart_items;
+    return Boolean(
+      order.is_photobook ||
+      order.photobook_design_id ||
+      order.photobook_details ||
+      item?.is_photobook ||
+      item?.photobook_design_id ||
+      item?.photobook_details ||
+      item?.photobook_design_data ||
+      String(item?.product_name || "").toLowerCase().includes("photo book") ||
+      String(item?.product_name || "").toLowerCase().includes("photobook")
+    );
+  };
 
   const [search] = useState();
 
@@ -389,9 +408,47 @@ const OrderExplore = () => {
                </div>
              </div>
            </Collapse.Panel>
+           {isPhotobookOrder(filterOrderData) && (
+             <Collapse.Panel
+               key={"photobook"}
+               header={
+                 <div className="flex items-center gap-2">
+                   <MdOutlineAutoStories className="text-teal-600 text-lg" />
+                   <span className="font-semibold text-teal-800">Photo Book Design Preview</span>
+                 </div>
+               }
+             >
+               <div className="bg-white p-5 mt-2 flex flex-col items-start gap-3">
+                 <p className="text-sm text-gray-600">
+                   This order contains a personalized customer Photo Book. You can open the 3D realistic flip preview with all pages, texts, photos, and layouts exactly as designed by the customer.
+                 </p>
+                 <Button
+                   type="primary"
+                   icon={<MdOutlineAutoStories />}
+                   onClick={() => setIsPhotobookPreviewVisible(true)}
+                   className="bg-teal-600 hover:bg-teal-700 border-0 flex items-center gap-2 font-medium"
+                   size="large"
+                 >
+                   Open 3D Photo Book Preview
+                 </Button>
+               </div>
+             </Collapse.Panel>
+           )}
          </Collapse>
        </div>
      </div>
+
+     {/* Customer Photobook Interactive 3D Preview Modal */}
+     <PhotoBookOrderPreviewModal
+       open={isPhotobookPreviewVisible}
+       onClose={() => setIsPhotobookPreviewVisible(false)}
+       order={filterOrderData}
+       orderItem={
+         Array.isArray(filterOrderData?.cart_items)
+           ? filterOrderData.cart_items[0]
+           : filterOrderData?.cart_items
+       }
+     />
    </Spin>
  );
 };

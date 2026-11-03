@@ -58,6 +58,7 @@ import {
   uploadImage,
   getPhotoBookTemplates,
 } from "../../api";
+import PhotoBookTemplateManager from "./PhotoBookTemplateManager";
 import _ from "lodash";
 import {
   CUSTOM_ERROR_NOTIFICATION,
@@ -1182,36 +1183,8 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
       .catch((err) => console.log("Failed to load templates:", err));
   }, []);
 
-  // Dynamic Photo Book Sizes State (Custom Sizes with Inch <-> CM auto-conversion)
-  const [photoBookSizes, setPhotoBookSizes] = useState([
-    {
-      _id: "size-default-1",
-      name: "8x8 Square",
-      width_in: 8,
-      height_in: 8,
-      width_cm: 20.32,
-      height_cm: 20.32,
-      is_available: true,
-    },
-    {
-      _id: "size-default-2",
-      name: "10x10 Square",
-      width_in: 10,
-      height_in: 10,
-      width_cm: 25.4,
-      height_cm: 25.4,
-      is_available: true,
-    },
-    {
-      _id: "size-default-3",
-      name: "12x12 Deluxe",
-      width_in: 12,
-      height_in: 12,
-      width_cm: 30.48,
-      height_cm: 30.48,
-      is_available: true,
-    },
-  ]);
+  // Dynamic Photo Book Sizes State (Manual entry, Inch <-> CM auto-conversion)
+  const [photoBookSizes, setPhotoBookSizes] = useState([]);
 
   // Size Modal State
   const [isSizeModalOpen, setIsSizeModalOpen] = useState(false);
@@ -1222,17 +1195,15 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
     height_in: "",
     width_cm: "",
     height_cm: "",
+    extra_page_price: 0,
     is_available: true,
   });
 
-  // Dynamic Photo Book Variants State (Title + Values like Basic, Premium)
-  const [photoBookVariants, setPhotoBookVariants] = useState([
-    {
-      _id: "pb-var-1",
-      title: "Edition",
-      values: ["Basic", "Premium"],
-    },
-  ]);
+  // Dynamic Photo Book Variants State (Manual entry)
+  const [photoBookVariants, setPhotoBookVariants] = useState([]);
+
+  // Dynamic Photo Book Templates State (Each template has Editions, Pricing per Size, Extra Page Surcharges, and Size-specific Mockup Images)
+  const [photoBookTemplates, setPhotoBookTemplates] = useState([]);
 
   // Real-time two-way Inch <--> CM conversion
   const handleWidthInChange = (val) => {
@@ -1299,6 +1270,7 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
       height_in: "",
       width_cm: "",
       height_cm: "",
+      extra_page_price: 0,
       is_available: true,
     });
     setIsSizeModalOpen(true);
@@ -1312,6 +1284,7 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
       height_in: item.height_in,
       width_cm: item.width_cm,
       height_cm: item.height_cm,
+      extra_page_price: item.extra_page_price ?? 0,
       is_available: item.is_available ?? true,
     });
     setIsSizeModalOpen(true);
@@ -1380,7 +1353,7 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
     setPhotoBookVariants((prev) => prev.filter((v) => v._id !== varId));
   };
 
-  // Generate Variable Product Pricing Rows from Sizes & Variants
+  // Generate Variable Product Pricing Rows from Sizes, Templates & Editions
   const handleSyncPhotoBookVariants = useCallback(() => {
     const availableSizes = photoBookSizes.filter((s) => s.is_available).map((s) => s.name);
     if (availableSizes.length === 0) {
@@ -1388,6 +1361,71 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
       return;
     }
 
+    // When Photo Book Templates are configured:
+    if (photoBookTemplates && photoBookTemplates.length > 0) {
+      const activeTemplates = photoBookTemplates.filter((t) => t.is_active !== false);
+      const templateOptions = activeTemplates.map((t) => t.template_name);
+
+      const editionNamesSet = new Set();
+      activeTemplates.forEach((t) => {
+        (t.editions || []).forEach((ed) => {
+          if (ed.edition_name?.trim()) editionNamesSet.add(ed.edition_name.trim());
+        });
+      });
+      const editionOptions = Array.from(editionNamesSet);
+
+      const newVariants = [
+        {
+          _id: uuidv4(),
+          variant_name: "Size",
+          variant_type: "text_box_variant",
+          variant_images: [],
+          options: availableSizes.map((s) => ({
+            _id: uuidv4(),
+            value: s,
+            variant_type: "text_box_variant",
+            color_code: "#000000",
+            image_names: [],
+          })),
+        },
+        {
+          _id: uuidv4(),
+          variant_name: "Template",
+          variant_type: "text_box_variant",
+          variant_images: [],
+          options: (templateOptions.length > 0 ? templateOptions : ["Standard Design"]).map((name) => ({
+            _id: uuidv4(),
+            value: name,
+            variant_type: "text_box_variant",
+            color_code: "#000000",
+            image_names: [],
+          })),
+        },
+      ];
+
+      if (editionOptions.length > 0) {
+        newVariants.push({
+          _id: uuidv4(),
+          variant_name: "Edition",
+          variant_type: "text_box_variant",
+          variant_images: [],
+          options: editionOptions.map((name) => ({
+            _id: uuidv4(),
+            value: name,
+            variant_type: "text_box_variant",
+            color_code: "#000000",
+            image_names: [],
+          })),
+        });
+      }
+
+      setVariants(newVariants);
+      form.setFieldsValue({ type: "Variable Product" });
+      message.success("Generated Variable Pricing rows for Size × Template × Edition!");
+      return;
+    }
+
+    // Fallback: simple variants
     const newVariants = [
       {
         _id: uuidv4(),
@@ -1425,7 +1463,7 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
     setVariants(newVariants);
     form.setFieldsValue({ type: "Variable Product" });
     message.success("Generated Variable Pricing rows for Size × Variant combinations!");
-  }, [photoBookSizes, photoBookVariants, form]);
+  }, [photoBookSizes, photoBookVariants, photoBookTemplates, form]);
 
   useEffect(() => {
     if (id && categoryData.length > 0 && subcategory_data.length > 0) {
@@ -1469,6 +1507,10 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
 
       if (id?.photobook_config?.variants && Array.isArray(id.photobook_config.variants)) {
         setPhotoBookVariants(id.photobook_config.variants);
+      }
+
+      if (id?.photobook_config?.templates && Array.isArray(id.photobook_config.templates)) {
+        setPhotoBookTemplates(id.photobook_config.templates);
       }
 
       setSEO_Datas({
@@ -2318,6 +2360,7 @@ const handleFinish = async (values) => {
         sizes: photoBookSizes,
         supported_sizes: availableSizeNames.length > 0 ? availableSizeNames : photoBookSizes.map((s) => s.name),
         variants: photoBookVariants,
+        templates: photoBookTemplates,
         default_pages: Number(pbConfig.default_pages) || 20,
         min_pages: Number(pbConfig.min_pages) || 10,
         max_pages: Number(pbConfig.max_pages) || 60,
@@ -2886,6 +2929,26 @@ const handleFinish = async (values) => {
                           ),
                         },
                         {
+                          title: "Extra Page Price (₹)",
+                          dataIndex: "extra_page_price",
+                          key: "extra_page_price",
+                          render: (val, record) => (
+                            <InputNumber
+                              min={0}
+                              prefix="₹"
+                              value={val ?? 0}
+                              onChange={(newVal) => {
+                                setPhotoBookSizes((prev) =>
+                                  prev.map((s) =>
+                                    s._id === record._id ? { ...s, extra_page_price: newVal } : s
+                                  )
+                                );
+                              }}
+                              className="w-24 text-xs font-semibold"
+                            />
+                          ),
+                        },
+                        {
                           title: "Available to Customer",
                           dataIndex: "is_available",
                           key: "is_available",
@@ -2949,96 +3012,27 @@ const handleFinish = async (values) => {
                   </div>
                 </Card>
 
-                {/* Section 2: Photo Book Variants (Title and Values like Basic, Premium) */}
+                {/* Section 2: Photo Book Templates, Editions & Size-Specific Mockup Galleries Studio */}
                 <Card
                   size="small"
                   title={
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-800">2. Photo Book Variants</span>
-                        <span className="text-xs text-gray-500 font-normal">
-                          (Define a variant Title and values like Basic, Premium)
+                        <span className="font-semibold text-gray-800">
+                          2. Photo Book Templates, Editions &amp; Size-Specific Mockups Studio
                         </span>
+                        <Tag color="cyan">{photoBookTemplates.length} Templates Configured</Tag>
                       </div>
-                      <Button
-                        type="dashed"
-                        icon={<PlusOutlined />}
-                        onClick={handleAddVariantGroup}
-                        size="small"
-                      >
-                        Add Variant Group
-                      </Button>
                     </div>
                   }
                   className="border-gray-200 shadow-sm"
                 >
-                  <div className="space-y-4">
-                    {photoBookVariants.map((v, index) => (
-                      <div
-                        key={v._id}
-                        className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-3"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-teal-800 uppercase tracking-wide">
-                            Variant Group #{index + 1}
-                          </span>
-                          <Button
-                            type="text"
-                            danger
-                            icon={<DeleteFilled />}
-                            onClick={() => handleDeleteVariantGroup(v._id)}
-                            size="small"
-                          />
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Variant Title <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                              placeholder="e.g. Edition, Quality Tier, Book Style"
-                              value={v.title}
-                              onChange={(e) => handleUpdateVariantTitle(v._id, e.target.value)}
-                              className="h-10"
-                            />
-                            <span className="text-[11px] text-gray-400">
-                              Title displayed to customers (e.g. Edition)
-                            </span>
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
-                              Variant Values / Options <span className="text-red-500">*</span>
-                            </label>
-                            <Select
-                              mode="tags"
-                              className="w-full min-h-[40px]"
-                              placeholder="Type option name (e.g. Basic, Premium, Deluxe) and press Enter"
-                              value={v.values}
-                              onChange={(vals) => handleUpdateVariantValues(v._id, vals)}
-                              tokenSeparators={[","]}
-                            />
-                            <span className="text-[11px] text-gray-400">
-                              Add choices for this variant (e.g. Basic, Premium, Deluxe)
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    {photoBookVariants.length === 0 && (
-                      <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                        <p className="text-gray-500 text-sm mb-3">No variants added yet.</p>
-                        <Button
-                          type="primary"
-                          icon={<PlusOutlined />}
-                          onClick={handleAddVariantGroup}
-                          className="!bg-teal-600 hover:!bg-teal-700"
-                        >
-                          Add Variant (e.g. Edition: Basic, Premium)
-                        </Button>
-                      </div>
-                    )}
-                  </div>
+                  <PhotoBookTemplateManager
+                    sizes={photoBookSizes}
+                    templates={photoBookTemplates}
+                    onChange={setPhotoBookTemplates}
+                    onSyncVariants={handleSyncPhotoBookVariants}
+                  />
                 </Card>
 
                 {/* Section 3: Page Limits & Settings */}
@@ -4170,6 +4164,21 @@ const handleFinish = async (values) => {
               />
             </div>
           </div>
+        </div>
+        {/* Extra Page Price per this Size */}
+        <div>
+          <label className="block text-xs text-gray-600 mb-1 font-medium">
+            Extra Page Price (₹) for this Size
+          </label>
+          <InputNumber
+            min={0}
+            step={1}
+            prefix="₹"
+            placeholder="e.g. 15"
+            value={sizeFormData.extra_page_price}
+            onChange={(val) => setSizeFormData((prev) => ({ ...prev, extra_page_price: val || 0 }))}
+            className="w-full h-10"
+          />
         </div>
       </div>
 

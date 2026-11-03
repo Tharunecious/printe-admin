@@ -395,3 +395,12 @@ export const getEligiblePhotoBookProducts = async () => {
 export const updateProductPhotoBookConfig = async (productId, data) => {
   return await custom_request.put(`${BASE_URL}/photobook/products/${productId}/photobook-config`, data);
 };
+
+export const getAvailableProductTemplates = async () => {
+  return await custom_request.get(`${BASE_URL}/photobook/available-product-templates`);
+};
+
+export const getPhotoBookDesign = async (id, guestId) => {
+  const params = guestId ? { guest_id: guestId } : {};
+  return await custom_request.get(`${BASE_URL}/photobook/designs/${id}`, { params });
+};

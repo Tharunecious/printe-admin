@@ -1,6 +1,8 @@
 import React from "react";
 import { getShapeClipPathDefinition } from "../utils/clipPaths";
-import { FaLock, FaImage, FaFont } from "react-icons/fa";
+import { PRESET_DECORATIONS, getFontFamilyFallback } from "../utils/presetAssets";
+import { getElementCoords } from "../utils/textUtils";
+import { FaLock, FaImage } from "react-icons/fa";
 
 const ElementRenderer = ({
   element,
@@ -8,30 +10,41 @@ const ElementRenderer = ({
   onSelect,
   scale = 1,
   previewMode = false,
+  canvasWidth = 707,
+  canvasHeight = 1000,
+  onMouseDown,
 }) => {
+  if (!element || element.is_hidden) return null;
+
   const {
     id,
     type,
-    x,
-    y,
     width,
     height,
     rotation = 0,
     z_index = 1,
     is_locked = false,
-    is_hidden = false,
   } = element;
-
-  if (is_hidden) return null;
 
   const clipDef =
     type === "photo_frame"
       ? getShapeClipPathDefinition(element.shape || "rectangle", element.border?.radius || 0)
       : null;
 
-  const renderClipContent = () => {
+  const renderClipContent = (isScaled100 = false) => {
     if (!clipDef) return null;
     const { type: shapeType, attrs } = clipDef;
+
+    if (isScaled100) {
+      if (shapeType === "ellipse") return <ellipse cx="50" cy="50" rx="50" ry="50" />;
+      if (shapeType === "rect") {
+        const rx = Number(attrs.rx || 0) * 100;
+        return <rect x="0" y="0" width="100" height="100" rx={rx} ry={rx} />;
+      }
+      if (shapeType === "path") return <path {...attrs} transform="scale(100, 100)" />;
+      if (shapeType === "polygon") return <polygon {...attrs} transform="scale(100, 100)" />;
+      return <rect x="0" y="0" width="100" height="100" />;
+    }
 
     if (shapeType === "ellipse") {
       return <ellipse {...attrs} />;
@@ -60,6 +73,10 @@ const ElementRenderer = ({
         : "none";
 
     const clipId = `clip-${id}`;
+    const cropZoom = element.crop?.zoom || 1;
+    const cropOffsetX = element.crop?.offsetX || 0;
+    const cropOffsetY = element.crop?.offsetY || 0;
+    const cropRotation = element.crop?.rotation || 0;
 
     return (
       <div
@@ -76,35 +93,41 @@ const ElementRenderer = ({
           className="overflow-visible w-full h-full"
         >
           <defs>
-            <clipPath id={clipId} clipPathUnits="objectBoundingBox">
-              {renderClipContent()}
+            <clipPath id={clipId}>
+              {renderClipContent(true)}
             </clipPath>
           </defs>
 
-          {/* Background of frame when empty */}
-          <rect
-            x="0"
-            y="0"
-            width="100"
-            height="100"
-            fill={hasImage ? "transparent" : "#f1f5f9"}
-            clipPath={`url(#${clipId})`}
-          />
-
-          {/* Photo inside frame clipped with SVG clipPath */}
-          {hasImage && (
-            <image
-              href={element.test_image_url}
+          {/* Group firmly clipped to shape: keeps photo zoom & pan inside container */}
+          <g clipPath={`url(#${clipId})`}>
+            {/* Background of frame when empty */}
+            <rect
               x="0"
               y="0"
               width="100"
               height="100"
-              preserveAspectRatio={
-                fitMode === "contain" ? "xMidYMid meet" : "xMidYMid slice"
-              }
-              clipPath={`url(#${clipId})`}
+              fill={hasImage ? "transparent" : "#f1f5f9"}
             />
-          )}
+
+            {/* Photo inside frame clipped with SVG clipPath with Photoshop crop & pan */}
+            {hasImage && (
+              <image
+                href={element.test_image_url}
+                x={`${cropOffsetX}%`}
+                y={`${cropOffsetY}%`}
+                width="100"
+                height="100"
+                preserveAspectRatio={
+                  fitMode === "contain" ? "xMidYMid meet" : "xMidYMid slice"
+                }
+                style={{
+                  transformOrigin: "50% 50%",
+                  transform: `scale(${cropZoom}) rotate(${cropRotation}deg)`,
+                  transition: "transform 0.1s ease",
+                }}
+              />
+            )}
+          </g>
 
           {/* Border overlay following the exact clip shape */}
           {borderWidth > 0 && (
@@ -112,7 +135,7 @@ const ElementRenderer = ({
               transform="scale(100, 100)"
               fill="none"
               stroke={borderColor}
-              strokeWidth={borderWidth / Math.min(width, height)}
+              strokeWidth={borderWidth / Math.min(width || 100, height || 100)}
               vectorEffect="non-scaling-stroke"
             >
               {renderClipContent()}
@@ -132,7 +155,7 @@ const ElementRenderer = ({
               <FaImage className="text-xl text-teal-600" />
             </div>
             <span className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
-              {element.frame_id || "Photo Frame"}
+              {element.frame_id || "Photo Placeholder"}
             </span>
             <span className="text-[10px] text-slate-500 capitalize">
               {element.shape || "rectangle"} • {fitMode}
@@ -145,40 +168,53 @@ const ElementRenderer = ({
 
   const renderText = () => {
     return (
-      <div
-        className="w-full h-full flex items-center select-none"
+      <span
+        data-photobook-font="true"
         style={{
-          fontFamily: element.font_family || "Inter",
-          fontSize: `${element.font_size || 24}px`,
-          fontWeight: element.font_weight || "normal",
-          fontStyle: element.font_style || "normal",
-          color: element.color || "#1f2937",
-          justifyContent:
-            element.align === "left"
-              ? "flex-start"
-              : element.align === "right"
-              ? "flex-end"
-              : "center",
+          "--photobook-font": effectiveFont,
+          fontFamily: effectiveFont,
+          fontWeight: "inherit",
+          fontStyle: "inherit",
+          letterSpacing: "inherit",
+          minWidth: "max-content",
+          maxWidth: "100%",
+          whiteSpace: hasExplicitNewlines ? "pre-line" : "nowrap",
+          wordBreak: "normal",
+          overflowWrap: "normal",
           textAlign: element.align || "center",
-          wordBreak: "break-word",
-          lineHeight: 1.2,
         }}
       >
-        <span>{element.content || element.placeholder || "Enter text here"}</span>
-      </div>
+        {element.content !== undefined && element.content !== null && String(element.content).trim().length > 0
+          ? element.content
+          : isSelected
+          ? "|"
+          : ""}
+      </span>
     );
   };
 
   const renderDecoration = () => {
-    if (element.svg) {
+    let svgContent = element.svg;
+    if (!svgContent && !element.asset_url) {
+      const matched = PRESET_DECORATIONS.find(
+        (d) =>
+          d.id === element.preset_id ||
+          d.id === element.id ||
+          (element.name && d.name?.toLowerCase() === element.name?.toLowerCase()) ||
+          d.id === element.frame_id
+      );
+      if (matched) svgContent = matched.svg;
+    }
+
+    if (svgContent) {
       return (
         <div
-          className="w-full h-full select-none"
+          className="w-full h-full select-none flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
           style={{
             opacity: element.opacity ?? 1,
             color: element.tint || "currentColor",
           }}
-          dangerouslySetInnerHTML={{ __html: element.svg }}
+          dangerouslySetInnerHTML={{ __html: svgContent }}
         />
       );
     }
@@ -187,26 +223,44 @@ const ElementRenderer = ({
       return (
         <img
           src={element.asset_url}
-          alt="Decoration"
-          className="w-full h-full object-contain pointer-events-none select-none"
+          alt={element.name || "Decoration"}
+          className="w-full h-full pointer-events-none select-none"
           style={{
             opacity: element.opacity ?? 1,
+            objectFit: element.fit_mode || "contain",
           }}
         />
       );
     }
 
+    if (previewMode) return null;
+
     return (
-      <div className="w-full h-full border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-xs">
-        Decoration
+      <div className="w-full h-full border border-dashed border-teal-300 bg-teal-50/40 rounded flex items-center justify-center text-teal-600 text-xs px-1 text-center select-none font-medium">
+        {element.name || "Decoration"}
       </div>
     );
   };
+
+  const coords = getElementCoords(element);
+  const leftPct = coords.left;
+  const topPct = coords.top;
+  const widthPct = coords.width;
+  const heightPct = coords.height;
+
+  const is1to1Shape =
+    type === "photo_frame" &&
+    ["circle", "heart", "star", "scallop", "hexagon"].includes(element.shape || element.mask_shape);
+
+  const effectiveFont = getFontFamilyFallback(element.font_family || "Inter");
+  const hasExplicitNewlines = element.content && String(element.content).includes("\n");
 
   return (
     <div
       id={`element-${id}`}
       data-element-id={id}
+      data-photobook-font={type === "text" ? "true" : undefined}
+      onMouseDown={onMouseDown}
       onClick={(e) => {
         e.stopPropagation();
         if (!previewMode && onSelect) onSelect(element);
@@ -215,13 +269,39 @@ const ElementRenderer = ({
         isSelected && !previewMode ? "ring-2 ring-teal-500 shadow-md" : ""
       }`}
       style={{
-        left: `${x}px`,
-        top: `${y}px`,
-        width: `${width}px`,
-        height: `${height}px`,
+        left: `${leftPct}%`,
+        top: `${topPct}%`,
+        width: `${widthPct}%`,
+        maxWidth: "100%",
+        height: is1to1Shape ? undefined : `${heightPct}%`,
+        aspectRatio: is1to1Shape ? "1 / 1" : undefined,
         transform: `rotate(${rotation}deg)`,
         transformOrigin: "center center",
-        zIndex: z_index,
+        zIndex: isSelected ? 150 : Math.max(1, Number(z_index) || 1),
+        ...(type === "text"
+          ? {
+              "--photobook-font": effectiveFont,
+              fontFamily: effectiveFont,
+              fontSize: `calc(${Number(element.font_size || 24)} * (100cqw / 707))`,
+              fontWeight: element.font_weight || "normal",
+              fontStyle: element.font_style || "normal",
+              letterSpacing: element.letter_spacing ? `calc(${Number(element.letter_spacing)} * (100cqw / 707))` : "normal",
+              lineHeight: element.line_height || 1.2,
+              color: element.color || "#1f2937",
+              textAlign: element.align || "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent:
+                element.align === "left"
+                  ? "flex-start"
+                  : element.align === "right"
+                  ? "flex-end"
+                  : "center",
+              wordBreak: "break-word",
+              overflowWrap: "break-word",
+              whiteSpace: hasExplicitNewlines ? "pre-line" : "normal",
+            }
+          : {}),
       }}
     >
       {type === "photo_frame" && renderPhotoFrame()}

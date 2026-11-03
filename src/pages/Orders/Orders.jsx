@@ -61,6 +61,8 @@ import {
 } from "react-icons/fi";
 import { FaRupeeSign } from "react-icons/fa";
 import { CiShoppingBasket } from "react-icons/ci";
+import { MdOutlineAutoStories } from "react-icons/md";
+import PhotoBookOrderPreviewModal from "./PhotoBookOrderPreviewModal";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
@@ -100,7 +102,31 @@ const Orders = () => {
   const [isQualityModalVisible, setIsQualityModalVisible] = useState(false);
   const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
   const [isCancellationModalVisible, setIsCancellationModalVisible] = useState(false);
+  const [isPhotobookPreviewVisible, setIsPhotobookPreviewVisible] = useState(false);
+  const [selectedPhotobookOrder, setSelectedPhotobookOrder] = useState(null);
   const [currentOrder, setCurrentOrder] = useState(null);
+
+  // Photobook detection helper
+  const isPhotobookOrder = (order) => {
+    if (!order) return false;
+    const item = Array.isArray(order.cart_items) ? order.cart_items[0] : order.cart_items;
+    return Boolean(
+      order.is_photobook ||
+      order.photobook_design_id ||
+      order.photobook_details ||
+      item?.is_photobook ||
+      item?.photobook_design_id ||
+      item?.photobook_details ||
+      item?.photobook_design_data ||
+      String(item?.product_name || "").toLowerCase().includes("photo book") ||
+      String(item?.product_name || "").toLowerCase().includes("photobook")
+    );
+  };
+
+  const handlePreviewPhotobook = (order) => {
+    setSelectedPhotobookOrder(order);
+    setIsPhotobookPreviewVisible(true);
+  };
   const [vendors, setVendors] = useState([]);
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [activeTab, setActiveTab] = useState("all");
@@ -1206,6 +1232,17 @@ const Orders = () => {
                             </Button>
                           )}
 
+                          {isPhotobookOrder(order) && (
+                            <Button
+                              size="middle"
+                              icon={<MdOutlineAutoStories />}
+                              onClick={() => handlePreviewPhotobook(order)}
+                              className="bg-teal-600 hover:bg-teal-700 text-white border-0 flex items-center gap-1.5 shadow-sm font-medium"
+                            >
+                              Preview Design
+                            </Button>
+                          )}
+
                           <Button
                             size="middle"
                             icon={<FiEye />}
@@ -1904,6 +1941,18 @@ const Orders = () => {
               <Descriptions.Item label="SGST">
                 {_.get(currentOrder, "cart_items[0].sgst", "N/A")}%
               </Descriptions.Item>
+              {isPhotobookOrder(currentOrder) && (
+                <Descriptions.Item label="Photo Book Preview" span={2}>
+                  <Button
+                    type="primary"
+                    icon={<MdOutlineAutoStories />}
+                    onClick={() => handlePreviewPhotobook(currentOrder)}
+                    className="bg-teal-600 hover:bg-teal-700 border-0 flex items-center gap-1.5 font-medium"
+                  >
+                    Preview Customer Design
+                  </Button>
+                </Descriptions.Item>
+              )}
             </Descriptions>
 
             {/* Photo Frame Images section - shows whenever father/son images exist, with individual + bulk download */}
@@ -2056,6 +2105,21 @@ const Orders = () => {
           </div>
         )}
       </Modal>
+
+      {/* Customer Photobook Interactive 3D Preview Modal */}
+      <PhotoBookOrderPreviewModal
+        open={isPhotobookPreviewVisible}
+        onClose={() => {
+          setIsPhotobookPreviewVisible(false);
+          setSelectedPhotobookOrder(null);
+        }}
+        order={selectedPhotobookOrder}
+        orderItem={
+          Array.isArray(selectedPhotobookOrder?.cart_items)
+            ? selectedPhotobookOrder.cart_items[0]
+            : selectedPhotobookOrder?.cart_items
+        }
+      />
     </div>
   );
 };

@@ -29,17 +29,30 @@ export const PRESET_GRADIENTS = [
 ];
 
 export const PRESET_FONTS = [
-  { family: "Playfair Display", label: "Playfair Display (Serif / Luxury)", category: "serif" },
-  { family: "Cinzel", label: "Cinzel (Classic / Regal)", category: "serif" },
-  { family: "Cormorant Garamond", label: "Cormorant Garamond (Refined Editorial)", category: "serif" },
-  { family: "Inter", label: "Inter (Modern Sans)", category: "sans-serif" },
-  { family: "Montserrat", label: "Montserrat (Clean Geometric)", category: "sans-serif" },
-  { family: "Caveat", label: "Caveat (Handwritten Signature)", category: "handwriting" },
-  { family: "Dancing Script", label: "Dancing Script (Elegant Script)", category: "handwriting" },
-  { family: "Great Vibes", label: "Great Vibes (Formal Calligraphy)", category: "handwriting" },
-  { family: "Merriweather", label: "Merriweather (Classic Book)", category: "serif" },
-  { family: "Roboto", label: "Roboto (Clean Standard)", category: "sans-serif" },
+  { family: "Playfair Display", name: "Playfair Display", label: "Playfair (Classic Serif)", category: "serif" },
+  { family: "Montserrat", name: "Montserrat", label: "Montserrat (Modern Clean)", category: "sans-serif" },
+  { family: "Great Vibes", name: "Great Vibes", label: "Great Vibes (Elegant Script)", category: "handwriting" },
+  { family: "Dancing Script", name: "Dancing Script", label: "Dancing Script (Casual Script)", category: "handwriting" },
+  { family: "Cinzel", name: "Cinzel", label: "Cinzel (Timeless Roman)", category: "serif" },
+  { family: "Cormorant Garamond", name: "Cormorant Garamond", label: "Cormorant (Romantic Serif)", category: "serif" },
+  { family: "Caveat", name: "Caveat", label: "Caveat (Handwritten)", category: "handwriting" },
+  { family: "Roboto", name: "Roboto", label: "Roboto (Neutral Sans)", category: "sans-serif" },
+  { family: "Inter", name: "Inter", label: "Inter (Crisp Sans)", category: "sans-serif" },
+  { family: "Merriweather", name: "Merriweather", label: "Merriweather (Editorial Serif)", category: "serif" },
+  { family: "Jost", name: "Jost", label: "Jost (Geometric Sans)", category: "sans-serif" },
 ];
+
+export const AVAILABLE_FONTS = PRESET_FONTS;
+
+export const getFontFamilyFallback = (fontName) => {
+  if (!fontName) return "'Inter', sans-serif";
+  const clean = String(fontName).replace(/['"]/g, "").trim();
+  const sansFonts = ["Inter", "Jost", "Roboto", "Montserrat", "Arial"];
+  const scriptFonts = ["Caveat", "Dancing Script", "Great Vibes"];
+  if (scriptFonts.includes(clean)) return `'${clean}', cursive`;
+  if (sansFonts.includes(clean)) return `'${clean}', sans-serif`;
+  return `'${clean}', serif`;
+};
 
 export const SAMPLE_TEST_PHOTOS = [
   {
@@ -70,6 +83,12 @@ export const SAMPLE_TEST_PHOTOS = [
 
 // Rich SVG Vector Decorations
 export const PRESET_DECORATIONS = [
+  {
+    id: "dec_red_rose",
+    name: "Velvet Red Rose",
+    category: "Wedding & Floral",
+    svg: `<svg viewBox="0 0 100 100" fill="none"><path d="M50 20 C42 10 30 18 32 28 C34 38 48 44 50 50 C52 44 66 38 68 28 C70 18 58 10 50 20 Z" fill="#e11d48"/><path d="M46 32 C38 28 32 36 36 44 C40 52 48 54 50 60 C52 54 60 52 64 44 C68 36 62 28 54 32 C50 35 48 35 46 32 Z" fill="#be123c"/><path d="M50 42 C45 38 42 44 45 48 C48 52 50 54 50 56 C50 54 52 52 55 48 C58 44 55 38 50 42 Z" fill="#9f1239"/><path d="M50 60 Q50 85 46 95" stroke="#15803d" stroke-width="3" stroke-linecap="round"/><path d="M48 72 Q35 68 32 60 Q40 58 49 70 Z" fill="#16a34a"/><path d="M48 80 Q62 76 66 68 Q58 66 48 78 Z" fill="#15803d"/></svg>`,
+  },
   {
     id: "dec_wreath",
     name: "Floral Laurel Wreath",
