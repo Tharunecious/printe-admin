@@ -63,6 +63,7 @@ import { FaRupeeSign } from "react-icons/fa";
 import { CiShoppingBasket } from "react-icons/ci";
 import { MdOutlineAutoStories } from "react-icons/md";
 import PhotoBookOrderPreviewModal from "./PhotoBookOrderPreviewModal";
+import { exportPhotoBookOrderZip } from "../../helper/photobookExportHelper";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
@@ -126,6 +127,46 @@ const Orders = () => {
   const handlePreviewPhotobook = (order) => {
     setSelectedPhotobookOrder(order);
     setIsPhotobookPreviewVisible(true);
+  };
+
+  const [downloadingPhotobookOrderId, setDownloadingPhotobookOrderId] = useState(null);
+
+  const handleDownloadPhotobook = async (order) => {
+    if (!order) return;
+    const orderId = String(order.invoice_no || order._id || "order").trim();
+    try {
+      setDownloadingPhotobookOrderId(orderId);
+      message.loading({
+        content: `Preparing Photo Book download for order #${orderId}...`,
+        key: `pb-dl-${orderId}`,
+        duration: 0,
+      });
+
+      await exportPhotoBookOrderZip(order, {
+        onStatus: (statusText) => {
+          message.loading({
+            content: statusText,
+            key: `pb-dl-${orderId}`,
+            duration: 0,
+          });
+        },
+      });
+
+      message.success({
+        content: `Photo Book ${orderId}.zip exported successfully!`,
+        key: `pb-dl-${orderId}`,
+        duration: 4,
+      });
+    } catch (err) {
+      console.error("Photo Book ZIP download error:", err);
+      message.error({
+        content: err.message || "Failed to download photobook ZIP.",
+        key: `pb-dl-${orderId}`,
+        duration: 5,
+      });
+    } finally {
+      setDownloadingPhotobookOrderId(null);
+    }
   };
   const [vendors, setVendors] = useState([]);
   const [selectedVendor, setSelectedVendor] = useState(null);
@@ -201,7 +242,9 @@ const Orders = () => {
     let filtered = activeOrders;
 
     // Filter by tab
-    if (activeTab !== "all") {
+    if (activeTab === "photobook") {
+      filtered = filtered.filter(isPhotobookOrder);
+    } else if (activeTab !== "all") {
       filtered = filtered.filter((order) => order.order_status === activeTab);
     }
 
@@ -972,6 +1015,23 @@ const Orders = () => {
             <FiBox className="mr-2" />
             All Orders
           </div>
+          <div
+            className={`px-4 py-2 cursor-pointer flex items-center whitespace-nowrap ${
+              activeTab === "photobook"
+                ? "border-b-2 border-teal-600 text-teal-600 font-medium"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+            onClick={() => setActiveTab("photobook")}
+          >
+            <MdOutlineAutoStories className="mr-2 text-teal-600" />
+            Photo Book Orders
+            <Badge
+              count={activeOrders.filter(isPhotobookOrder).length}
+              showZero
+              size="small"
+              className="ml-2"
+            />
+          </div>
           {statusFlow.filter(s => s.label !== "cancelled").map((status) => (
             <div
               key={status.key}
@@ -1233,14 +1293,28 @@ const Orders = () => {
                           )}
 
                           {isPhotobookOrder(order) && (
-                            <Button
-                              size="middle"
-                              icon={<MdOutlineAutoStories />}
-                              onClick={() => handlePreviewPhotobook(order)}
-                              className="bg-teal-600 hover:bg-teal-700 text-white border-0 flex items-center gap-1.5 shadow-sm font-medium"
-                            >
-                              Preview Design
-                            </Button>
+                            <>
+                              <Button
+                                size="middle"
+                                icon={<FiDownload />}
+                                loading={
+                                  downloadingPhotobookOrderId ===
+                                  String(order.invoice_no || order._id).trim()
+                                }
+                                onClick={() => handleDownloadPhotobook(order)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white border-0 flex items-center gap-1.5 shadow-sm font-medium"
+                              >
+                                Download
+                              </Button>
+                              <Button
+                                size="middle"
+                                icon={<MdOutlineAutoStories />}
+                                onClick={() => handlePreviewPhotobook(order)}
+                                className="bg-teal-600 hover:bg-teal-700 text-white border-0 flex items-center gap-1.5 shadow-sm font-medium"
+                              >
+                                Preview Design
+                              </Button>
+                            </>
                           )}
 
                           <Button
@@ -1942,15 +2016,29 @@ const Orders = () => {
                 {_.get(currentOrder, "cart_items[0].sgst", "N/A")}%
               </Descriptions.Item>
               {isPhotobookOrder(currentOrder) && (
-                <Descriptions.Item label="Photo Book Preview" span={2}>
-                  <Button
-                    type="primary"
-                    icon={<MdOutlineAutoStories />}
-                    onClick={() => handlePreviewPhotobook(currentOrder)}
-                    className="bg-teal-600 hover:bg-teal-700 border-0 flex items-center gap-1.5 font-medium"
-                  >
-                    Preview Customer Design
-                  </Button>
+                <Descriptions.Item label="Photo Book Design" span={2}>
+                  <Space>
+                    <Button
+                      type="primary"
+                      icon={<FiDownload />}
+                      loading={
+                        downloadingPhotobookOrderId ===
+                        String(currentOrder.invoice_no || currentOrder._id).trim()
+                      }
+                      onClick={() => handleDownloadPhotobook(currentOrder)}
+                      className="bg-indigo-600 hover:bg-indigo-700 border-0 flex items-center gap-1.5 font-medium"
+                    >
+                      Download (300 DPI ZIP)
+                    </Button>
+                    <Button
+                      type="primary"
+                      icon={<MdOutlineAutoStories />}
+                      onClick={() => handlePreviewPhotobook(currentOrder)}
+                      className="bg-teal-600 hover:bg-teal-700 border-0 flex items-center gap-1.5 font-medium"
+                    >
+                      Preview Customer Design
+                    </Button>
+                  </Space>
                 </Descriptions.Item>
               )}
             </Descriptions>

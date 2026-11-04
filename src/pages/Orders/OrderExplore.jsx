@@ -12,15 +12,57 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { IMAGE_HELPER } from "../../helper/imagehelper";
 import { MdOutlineAutoStories } from "react-icons/md";
+import { FiDownload } from "react-icons/fi";
 import PhotoBookOrderPreviewModal from "./PhotoBookOrderPreviewModal";
+import { exportPhotoBookOrderZip } from "../../helper/photobookExportHelper";
+import { message } from "antd";
 
 const OrderExplore = () => {
   const [orderData, setOrderData] = useState([]);
   const [subtotal, setSubtotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [isPhotobookPreviewVisible, setIsPhotobookPreviewVisible] = useState(false);
+  const [downloadingPhotobook, setDownloadingPhotobook] = useState(false);
   const location = useLocation();
   const order_id = location.state;
+
+  const handleDownloadPhotobook = async (order) => {
+    if (!order) return;
+    const orderId = String(order.invoice_no || order._id || "order").trim();
+    try {
+      setDownloadingPhotobook(true);
+      message.loading({
+        content: `Preparing Photo Book download for order #${orderId}...`,
+        key: `explore-pb-dl-${orderId}`,
+        duration: 0,
+      });
+
+      await exportPhotoBookOrderZip(order, {
+        onStatus: (statusText) => {
+          message.loading({
+            content: statusText,
+            key: `explore-pb-dl-${orderId}`,
+            duration: 0,
+          });
+        },
+      });
+
+      message.success({
+        content: `Photo Book ${orderId}.zip exported successfully!`,
+        key: `explore-pb-dl-${orderId}`,
+        duration: 4,
+      });
+    } catch (err) {
+      console.error("Photo Book ZIP download error:", err);
+      message.error({
+        content: err.message || "Failed to download photobook ZIP.",
+        key: `explore-pb-dl-${orderId}`,
+        duration: 5,
+      });
+    } finally {
+      setDownloadingPhotobook(false);
+    }
+  };
 
   const isPhotobookOrder = (order) => {
     if (!order) return false;
@@ -422,15 +464,27 @@ const OrderExplore = () => {
                  <p className="text-sm text-gray-600">
                    This order contains a personalized customer Photo Book. You can open the 3D realistic flip preview with all pages, texts, photos, and layouts exactly as designed by the customer.
                  </p>
-                 <Button
-                   type="primary"
-                   icon={<MdOutlineAutoStories />}
-                   onClick={() => setIsPhotobookPreviewVisible(true)}
-                   className="bg-teal-600 hover:bg-teal-700 border-0 flex items-center gap-2 font-medium"
-                   size="large"
-                 >
-                   Open 3D Photo Book Preview
-                 </Button>
+                 <div className="flex items-center gap-3">
+                   <Button
+                     type="primary"
+                     icon={<FiDownload />}
+                     loading={downloadingPhotobook}
+                     onClick={() => handleDownloadPhotobook(filterOrderData)}
+                     className="bg-indigo-600 hover:bg-indigo-700 border-0 flex items-center gap-2 font-medium"
+                     size="large"
+                   >
+                     Download Photo Book (300 DPI ZIP)
+                   </Button>
+                   <Button
+                     type="default"
+                     icon={<MdOutlineAutoStories />}
+                     onClick={() => setIsPhotobookPreviewVisible(true)}
+                     className="border-teal-600 text-teal-700 hover:text-teal-800 flex items-center gap-2 font-medium"
+                     size="large"
+                   >
+                     Open 3D Photo Book Preview
+                   </Button>
+                 </div>
                </div>
              </Collapse.Panel>
            )}

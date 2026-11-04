@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Modal, Spin, Tag } from "antd";
+import { Modal, Spin, Tag, Button, message } from "antd";
 import {
   MdChevronLeft,
   MdChevronRight,
@@ -7,7 +7,9 @@ import {
   MdClose,
   MdLayers,
 } from "react-icons/md";
+import { FiDownload } from "react-icons/fi";
 import { getPhotoBookDesign, getPhotoBookTemplateById } from "../../api";
+import { exportPhotoBookOrderZip } from "../../helper/photobookExportHelper";
 
 // ── Google Fonts dynamic stylesheet injector ─────────────────────────────────
 const GOOGLE_FONTS_LIST = [
@@ -627,10 +629,53 @@ const RealisticBookPreview = ({
   renderCanvas,
   onClose,
   sizeInfo,
+  order,
 }) => {
   const [isFlipping, setIsFlipping] = useState(false);
   const [flipDirection, setFlipDirection] = useState("next"); // "next" | "prev"
   const [transitionData, setTransitionData] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleDownloadZip = async () => {
+    if (!order) {
+      message.warning("Order details not available for export.");
+      return;
+    }
+    const orderId = String(order.invoice_no || order._id || "order").trim();
+    try {
+      setIsExporting(true);
+      message.loading({
+        content: `Preparing 300 DPI Photo Book download for order #${orderId}...`,
+        key: `modal-export-${orderId}`,
+        duration: 0,
+      });
+
+      await exportPhotoBookOrderZip(order, {
+        onStatus: (statusText) => {
+          message.loading({
+            content: statusText,
+            key: `modal-export-${orderId}`,
+            duration: 0,
+          });
+        },
+      });
+
+      message.success({
+        content: `Photo Book ${orderId}.zip exported successfully!`,
+        key: `modal-export-${orderId}`,
+        duration: 4,
+      });
+    } catch (err) {
+      console.error("Photo Book export error:", err);
+      message.error({
+        content: err.message || "Failed to download ZIP.",
+        key: `modal-export-${orderId}`,
+        duration: 5,
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const currentStep = steps[currentStepIndex];
   if (!currentStep) return null;
@@ -760,6 +805,18 @@ const RealisticBookPreview = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {order && (
+            <Button
+              size="small"
+              type="primary"
+              icon={<FiDownload />}
+              loading={isExporting}
+              onClick={handleDownloadZip}
+              className="bg-indigo-600 hover:bg-indigo-700 border-0 flex items-center gap-1 font-medium text-xs rounded-lg shadow-sm"
+            >
+              Download Book (ZIP)
+            </Button>
+          )}
           {sizeInfo?.dimensions && (
             <Tag color="cyan" className="font-semibold px-2.5 py-0.5 text-xs m-0 rounded-full">
               Size: {sizeInfo.dimensions}
@@ -1343,6 +1400,7 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
           renderCanvas={(page) => <PhotobookPageCanvas page={page} />}
           onClose={onClose}
           sizeInfo={sizeInfo}
+          order={order}
         />
       ) : (
         <div className="min-h-[300px] flex flex-col items-center justify-center text-slate-400 gap-2">
