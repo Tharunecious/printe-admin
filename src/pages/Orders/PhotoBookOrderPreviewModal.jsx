@@ -501,15 +501,14 @@ const PhotobookPageCanvas = ({ page }) => {
                 <svg
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  style={{ zIndex: 10 }}
+                  className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
+                  style={{ zIndex: 10, overflow: "visible" }}
                 >
                   <g
                     transform="scale(100, 100)"
                     fill="none"
                     stroke={borderColor}
-                    strokeWidth={normalizedBorderStroke}
-                    vectorEffect="non-scaling-stroke"
+                    strokeWidth={borderWidth / elRefDim}
                   >
                     {renderShapeSvgClip(clipDef, false)}
                   </g>
@@ -553,6 +552,22 @@ const PhotobookPageCanvas = ({ page }) => {
                 wordBreak: "break-word",
                 overflowWrap: "break-word",
                 whiteSpace: hasExplicitNewlines ? "pre-line" : "normal",
+                textShadow:
+                  el.shadow?.blur || el.shadow?.offsetX || el.shadow?.offsetY
+                    ? `${el.shadow.offsetX ?? 2}px ${el.shadow.offsetY ?? 2}px ${el.shadow.blur || 0}px ${el.shadow.color || "rgba(0,0,0,0.5)"}`
+                    : undefined,
+                background:
+                  el.background?.type !== "none" && el.background?.value
+                    ? el.background.value
+                    : el.bg_color || undefined,
+                padding:
+                  el.background?.value || el.bg_color
+                    ? `${el.background?.padding ?? 4}px ${(el.background?.padding ?? 4) * 1.5}px`
+                    : undefined,
+                borderRadius:
+                  el.background?.value || el.bg_color
+                    ? `${el.background?.radius ?? 4}px`
+                    : undefined,
                 zIndex: Math.max(100, Number(el.z_index) || 100),
                 pointerEvents: "none",
               }}

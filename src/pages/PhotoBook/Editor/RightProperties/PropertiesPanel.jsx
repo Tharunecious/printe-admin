@@ -1290,13 +1290,29 @@ const PropertiesPanel = ({
                   </div>
                   <div
                     data-photobook-font="true"
-                    className="text-base truncate px-1 py-1"
+                    className="text-base truncate px-2 py-1.5 transition-all"
                     style={{
                       fontFamily: fontCss,
                       "--photobook-font": fontCss,
                       fontWeight: selectedElement.font_weight || "normal",
                       fontStyle: selectedElement.font_style || "normal",
                       color: textColor,
+                      textShadow:
+                        selectedElement.shadow?.blur || selectedElement.shadow?.offsetX || selectedElement.shadow?.offsetY
+                          ? `${selectedElement.shadow.offsetX ?? 2}px ${selectedElement.shadow.offsetY ?? 2}px ${selectedElement.shadow.blur || 0}px ${selectedElement.shadow.color || "rgba(0,0,0,0.5)"}`
+                          : undefined,
+                      background:
+                        selectedElement.background?.type !== "none" && selectedElement.background?.value
+                          ? selectedElement.background.value
+                          : selectedElement.bg_color || undefined,
+                      padding:
+                        selectedElement.background?.value || selectedElement.bg_color
+                          ? `${selectedElement.background?.padding ?? 4}px ${(selectedElement.background?.padding ?? 4) * 1.5}px`
+                          : undefined,
+                      borderRadius:
+                        selectedElement.background?.value || selectedElement.bg_color
+                          ? `${selectedElement.background?.radius ?? 4}px`
+                          : undefined,
                     }}
                   >
                     {selectedElement.content || "The quick brown fox jumps"}
@@ -1459,6 +1475,350 @@ const PropertiesPanel = ({
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* ==================== ADVANCED TEXT SHADOW ==================== */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <span>Text Shadow</span>
+              </label>
+              <Switch
+                size="small"
+                checked={Boolean(selectedElement.shadow?.blur || selectedElement.shadow?.enable)}
+                onChange={(enabled) =>
+                  onUpdateElement(id, {
+                    shadow: enabled
+                      ? {
+                          enable: true,
+                          color: selectedElement.shadow?.color || "rgba(0,0,0,0.4)",
+                          blur: selectedElement.shadow?.blur || 4,
+                          offsetX: selectedElement.shadow?.offsetX ?? 2,
+                          offsetY: selectedElement.shadow?.offsetY ?? 2,
+                        }
+                      : { enable: false, color: "#000000", blur: 0, offsetX: 0, offsetY: 0 },
+                  })
+                }
+              />
+            </div>
+
+            {(selectedElement.shadow?.blur > 0 || selectedElement.shadow?.enable) && (
+              <div className="space-y-2 pt-1 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-600 font-medium">Shadow Color</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={selectedElement.shadow?.color?.startsWith("#") ? selectedElement.shadow.color : "#000000"}
+                      onChange={(e) =>
+                        onUpdateElement(id, {
+                          shadow: {
+                            ...(selectedElement.shadow || {}),
+                            enable: true,
+                            color: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-6 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                    />
+                    <span className="text-[10px] font-mono text-slate-500">
+                      {selectedElement.shadow?.color || "rgba(0,0,0,0.4)"}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-600 mb-0.5">
+                    <span>Intensity / Blur</span>
+                    <span className="font-mono text-teal-600 font-semibold">{selectedElement.shadow?.blur || 0}px</span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={30}
+                    value={selectedElement.shadow?.blur || 0}
+                    onChange={(blur) =>
+                      onUpdateElement(id, {
+                        shadow: {
+                          ...(selectedElement.shadow || {}),
+                          enable: blur > 0,
+                          blur,
+                          color: selectedElement.shadow?.color || "rgba(0,0,0,0.4)",
+                          offsetX: selectedElement.shadow?.offsetX ?? 2,
+                          offsetY: selectedElement.shadow?.offsetY ?? 2,
+                        },
+                      })
+                    }
+                    className="my-1"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-slate-500 block">Offset X</label>
+                    <InputNumber
+                      size="small"
+                      min={-20}
+                      max={20}
+                      value={selectedElement.shadow?.offsetX ?? 2}
+                      onChange={(ox) =>
+                        onUpdateElement(id, {
+                          shadow: {
+                            ...(selectedElement.shadow || {}),
+                            offsetX: ox ?? 0,
+                          },
+                        })
+                      }
+                      addonAfter="px"
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 block">Offset Y</label>
+                    <InputNumber
+                      size="small"
+                      min={-20}
+                      max={20}
+                      value={selectedElement.shadow?.offsetY ?? 2}
+                      onChange={(oy) =>
+                        onUpdateElement(id, {
+                          shadow: {
+                            ...(selectedElement.shadow || {}),
+                            offsetY: oy ?? 0,
+                          },
+                        })
+                      }
+                      addonAfter="px"
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ==================== ADVANCED TEXT BACKGROUND ==================== */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700">
+                Text Background
+              </label>
+              <div className="flex items-center gap-1 bg-slate-200/80 p-0.5 rounded-lg text-[10px]">
+                {["none", "color", "gradient"].map((mode) => {
+                  const currentMode = selectedElement.background?.type || (selectedElement.bg_color ? "color" : "none");
+                  const isActive = currentMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        if (mode === "none") {
+                          onUpdateElement(id, {
+                            background: { type: "none", value: "" },
+                            bg_color: undefined,
+                          });
+                        } else if (mode === "color") {
+                          onUpdateElement(id, {
+                            background: {
+                              type: "color",
+                              value: selectedElement.background?.value || "#ffffff",
+                              padding: selectedElement.background?.padding ?? 6,
+                              radius: selectedElement.background?.radius ?? 4,
+                            },
+                            bg_color: selectedElement.background?.value || "#ffffff",
+                          });
+                        } else {
+                          onUpdateElement(id, {
+                            background: {
+                              type: "gradient",
+                              value: PRESET_GRADIENTS[1]?.value || "linear-gradient(135deg, #fef3c7 0%, #f59e0b 100%)",
+                              padding: selectedElement.background?.padding ?? 6,
+                              radius: selectedElement.background?.radius ?? 4,
+                            },
+                            bg_color: PRESET_GRADIENTS[1]?.value || "linear-gradient(135deg, #fef3c7 0%, #f59e0b 100%)",
+                          });
+                        }
+                      }}
+                      className={`px-2 py-0.5 rounded capitalize font-medium transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-white text-teal-700 font-bold shadow-xs"
+                          : "text-slate-600 hover:text-black"
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Solid Color Controls */}
+            {(selectedElement.background?.type === "color" || (!selectedElement.background?.type && selectedElement.bg_color)) && (
+              <div className="space-y-2 pt-1 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-600 font-medium">Solid Background</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={selectedElement.background?.value || selectedElement.bg_color || "#ffffff"}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        onUpdateElement(id, {
+                          background: {
+                            ...(selectedElement.background || {}),
+                            type: "color",
+                            value: val,
+                          },
+                          bg_color: val,
+                        });
+                      }}
+                      className="w-6 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                    />
+                    <Input
+                      size="small"
+                      value={selectedElement.background?.value || selectedElement.bg_color || "#ffffff"}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        onUpdateElement(id, {
+                          background: {
+                            ...(selectedElement.background || {}),
+                            type: "color",
+                            value: val,
+                          },
+                          bg_color: val,
+                        });
+                      }}
+                      className="w-20 font-mono text-[10px]"
+                    />
+                  </div>
+                </div>
+
+                {/* Preset Solid Chips */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {PRESET_SOLID_COLORS.slice(0, 10).map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() =>
+                        onUpdateElement(id, {
+                          background: {
+                            ...(selectedElement.background || {}),
+                            type: "color",
+                            value: c.value,
+                          },
+                          bg_color: c.value,
+                        })
+                      }
+                      style={{ backgroundColor: c.value }}
+                      className="w-5 h-5 rounded-md border border-slate-300 hover:scale-110 transition-transform cursor-pointer shadow-2xs"
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Gradient Controls */}
+            {selectedElement.background?.type === "gradient" && (
+              <div className="space-y-2 pt-1 border-t border-slate-200">
+                <span className="text-[11px] text-slate-600 font-medium block">Preset Gradients</span>
+                <div className="grid grid-cols-2 gap-1.5 max-h-[160px] overflow-y-auto p-1 bg-white rounded-lg border border-slate-200">
+                  {PRESET_GRADIENTS.map((g) => {
+                    const isSelected = selectedElement.background?.value === g.value;
+                    return (
+                      <button
+                        key={g.name}
+                        type="button"
+                        onClick={() =>
+                          onUpdateElement(id, {
+                            background: {
+                              ...(selectedElement.background || {}),
+                              type: "gradient",
+                              value: g.value,
+                            },
+                            bg_color: g.value,
+                          })
+                        }
+                        style={{ background: g.value }}
+                        className={`p-1.5 rounded-lg border text-left cursor-pointer transition-all h-9 flex items-end shadow-2xs ${
+                          isSelected ? "ring-2 ring-teal-500 border-white" : "border-slate-200 hover:opacity-90"
+                        }`}
+                      >
+                        <span className="text-[9px] font-bold text-white bg-black/40 px-1 rounded truncate max-w-full">
+                          {g.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-1">
+                  <label className="text-[10px] text-slate-500 block mb-0.5">Custom CSS Gradient</label>
+                  <Input
+                    size="small"
+                    value={selectedElement.background?.value || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      onUpdateElement(id, {
+                        background: {
+                          ...(selectedElement.background || {}),
+                          type: "gradient",
+                          value: val,
+                        },
+                        bg_color: val,
+                      });
+                    }}
+                    placeholder="linear-gradient(...)"
+                    className="font-mono text-[10px]"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Padding & Corner Radius (if background is enabled) */}
+            {selectedElement.background?.type && selectedElement.background.type !== "none" && (
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200">
+                <div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 mb-0.5">
+                    <span>Padding</span>
+                    <span className="font-mono">{selectedElement.background?.padding ?? 6}px</span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={24}
+                    value={selectedElement.background?.padding ?? 6}
+                    onChange={(padding) =>
+                      onUpdateElement(id, {
+                        background: {
+                          ...(selectedElement.background || {}),
+                          padding,
+                        },
+                      })
+                    }
+                    className="my-1"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 mb-0.5">
+                    <span>Radius</span>
+                    <span className="font-mono">{selectedElement.background?.radius ?? 4}px</span>
+                  </div>
+                  <Slider
+                    min={0}
+                    max={24}
+                    value={selectedElement.background?.radius ?? 4}
+                    onChange={(radius) =>
+                      onUpdateElement(id, {
+                        background: {
+                          ...(selectedElement.background || {}),
+                          radius,
+                        },
+                      })
+                    }
+                    className="my-1"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Customer Editable Settings */}

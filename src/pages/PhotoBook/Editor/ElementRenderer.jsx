@@ -300,6 +300,22 @@ const ElementRenderer = ({
               wordBreak: "break-word",
               overflowWrap: "break-word",
               whiteSpace: hasExplicitNewlines ? "pre-line" : "normal",
+              textShadow:
+                element.shadow?.blur || element.shadow?.offsetX || element.shadow?.offsetY
+                  ? `${element.shadow.offsetX ?? 2}px ${element.shadow.offsetY ?? 2}px ${element.shadow.blur || 0}px ${element.shadow.color || "rgba(0,0,0,0.5)"}`
+                  : undefined,
+              background:
+                element.background?.type !== "none" && element.background?.value
+                  ? element.background.value
+                  : element.bg_color || undefined,
+              padding:
+                element.background?.value || element.bg_color
+                  ? `${element.background?.padding ?? 4}px ${(element.background?.padding ?? 4) * 1.5}px`
+                  : undefined,
+              borderRadius:
+                element.background?.value || element.bg_color
+                  ? `${element.background?.radius ?? 4}px`
+                  : undefined,
             }
           : {}),
       }}

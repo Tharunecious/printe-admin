@@ -795,6 +795,34 @@ export const renderPageToCanvas = async (page, { widthPx, heightPx, templateData
       ctx.rotate((rotation * Math.PI) / 180);
       ctx.translate(-widthElPx / 2, -heightElPx / 2);
 
+      // 1. Text Background (Solid Color or Linear Gradient)
+      const textBg = el.background || (el.bg_color ? { type: "color", value: el.bg_color } : null);
+      if (textBg && textBg.type !== "none" && textBg.value) {
+        ctx.save();
+        const padPx = (Number(textBg.padding) || 6) * scaleFactor;
+        const radPx = (Number(textBg.radius) || 4) * scaleFactor;
+        const bgX = -padPx;
+        const bgY = -padPx;
+        const bgW = widthElPx + padPx * 2;
+        const bgH = heightElPx + padPx * 2;
+
+        if (textBg.type === "gradient" || (typeof textBg.value === "string" && textBg.value.startsWith("linear-gradient"))) {
+          const linearGrad = parseLinearGradient(ctx, textBg.value, bgW, bgH);
+          ctx.fillStyle = linearGrad || "#ffffff";
+        } else {
+          ctx.fillStyle = textBg.value;
+        }
+
+        if (radPx > 0 && typeof ctx.roundRect === "function") {
+          ctx.beginPath();
+          ctx.roundRect(bgX, bgY, bgW, bgH, radPx);
+          ctx.fill();
+        } else {
+          ctx.fillRect(bgX, bgY, bgW, bgH);
+        }
+        ctx.restore();
+      }
+
       const fontSizePx = Math.round(Number(el.font_size || 24) * scaleFactor);
       const fontFamily = getFontFamilyFallback(el.font_family || "Playfair Display");
       const fontStyle = el.font_style || "normal";
@@ -802,6 +830,15 @@ export const renderPageToCanvas = async (page, { widthPx, heightPx, templateData
       ctx.font = `${fontStyle} ${fontWeight} ${fontSizePx}px ${fontFamily}`;
       ctx.fillStyle = el.color || "#1f2937";
       ctx.textBaseline = "middle";
+
+      // 2. Text Shadow
+      const textShadow = el.shadow;
+      if (textShadow && (textShadow.blur > 0 || textShadow.offsetX || textShadow.offsetY)) {
+        ctx.shadowColor = textShadow.color || "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = (Number(textShadow.blur) || 0) * scaleFactor;
+        ctx.shadowOffsetX = (Number(textShadow.offsetX) || 0) * scaleFactor;
+        ctx.shadowOffsetY = (Number(textShadow.offsetY) || 0) * scaleFactor;
+      }
 
       if (el.letter_spacing) {
         const letterSpacingPx = Number(el.letter_spacing) * scaleFactor;

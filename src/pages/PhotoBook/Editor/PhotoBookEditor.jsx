@@ -31,7 +31,6 @@ import {
   MdRedo,
   MdZoomIn,
   MdZoomOut,
-  MdLayers,
   MdCheckCircle,
   MdOutlineAutoStories,
   MdFormatSize,
@@ -39,17 +38,13 @@ import {
   MdCloudUpload,
   MdEdit,
   MdCrop,
-  MdFlip,
   MdMoreHoriz,
-  MdFormatAlignCenter,
   MdFitScreen,
-  MdDesktopWindows,
   MdContentCopy,
   MdDeleteOutline,
   MdLockOutline,
   MdLockOpen,
 } from "react-icons/md";
-import { FiRotateCw } from "react-icons/fi";
 import { v4 as uuidv4 } from "uuid";
 import LeftPanel from "./LeftSidebar/LeftPanel";
 import Canvas from "./Canvas";
@@ -1094,31 +1089,19 @@ const PhotoBookEditor = () => {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100 select-none">
       {/* ==================== EXACT CANVA-STYLE TOP STUDIO HEADER ==================== */}
       <header className="h-14 bg-[#0f172a] text-white border-b border-slate-800 flex items-center justify-between px-4 z-30 shadow-md">
-        {/* Left Section: Logo, Divider, Title, Editable Doc Name */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-teal-500 text-white font-black flex items-center justify-center text-sm shadow-md ring-2 ring-teal-400/30">
-              P
-            </div>
-            <span className="font-extrabold text-white text-base tracking-wide font-sans">
-              Printe
-            </span>
-          </div>
-
-          <div className="h-5 w-px bg-slate-700/80 mx-1" />
-
-          <span className="text-xs text-slate-400 font-medium hidden sm:inline">
-            Photo Book Editor
-          </span>
-
+        {/* Left Section: Back, Title, Status, Linked Config */}
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={() => navigate("/photobook-templates")}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-1 cursor-pointer"
+            className="flex items-center gap-1.5 p-1.5 px-2.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer border border-slate-700/60"
             title="Back to Templates"
           >
-            <MdArrowBack size={18} />
+            <MdArrowBack size={16} />
+            <span className="text-xs font-semibold">Templates</span>
           </button>
+
+          <div className="h-5 w-px bg-slate-700/80 mx-1" />
 
           {/* Editable Document Title with Pencil */}
           <div className="flex items-center gap-2">
@@ -1279,14 +1262,6 @@ const PhotoBookEditor = () => {
               <span>Fit</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            className="p-2 rounded-lg bg-slate-800/90 border border-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
-            title="Desktop View Mode"
-          >
-            <MdDesktopWindows size={16} />
-          </button>
         </div>
 
         {/* Right Section: Save Draft, Preview, Validate & Publish */}
@@ -1323,102 +1298,6 @@ const PhotoBookEditor = () => {
           </button>
         </div>
       </header>
-
-      {/* ==================== CANVA SUB-TOOLBAR STRIP ==================== */}
-      <div className="min-h-10 py-1 bg-[#0b1120] border-b border-slate-800 text-xs text-slate-300 flex items-center px-4 justify-between select-none z-20 overflow-x-auto gap-2">
-        <div className="flex items-center gap-2">
-          {/* Quick Transform and Arrangement Tools */}
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedElement) {
-                handleUpdateElement(selectedElement.id, {
-                  flip_h: !selectedElement.flip_h,
-                });
-                message.info(selectedElement.flip_h ? "Flipped normal" : "Flipped horizontal");
-              } else {
-                message.info("Select an element to flip");
-              }
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-800 hover:text-white transition-colors cursor-pointer text-slate-300"
-            title="Flip horizontally"
-          >
-            <MdFlip size={15} />
-            <span>Flip</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedElement) {
-                const nextRot = ((selectedElement.rotation || 0) + 90) % 360;
-                handleUpdateElement(selectedElement.id, { rotation: nextRot });
-              } else {
-                message.info("Select an element to rotate");
-              }
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-800 hover:text-white transition-colors cursor-pointer text-slate-300"
-            title="Rotate 90 degrees"
-          >
-            <FiRotateCw size={14} />
-            <span>Rotate</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedElement) {
-                const w = selectedElement.width_pct || 40;
-                handleUpdateElement(selectedElement.id, {
-                  x_pct: Number(((100 - w) / 2).toFixed(2)),
-                });
-                message.success("Centered horizontally");
-              } else {
-                message.info("Select an element to align");
-              }
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded hover:bg-slate-800 hover:text-white transition-colors cursor-pointer text-slate-300"
-            title="Align Center"
-          >
-            <MdFormatAlignCenter size={15} />
-            <span>Align</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedElementId(null);
-              setPanelTab((t) => (t === "layers" ? "page" : "layers"));
-            }}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded transition-colors cursor-pointer ${
-              panelTab === "layers" && !selectedElementId
-                ? "bg-sky-600/30 text-sky-400 font-semibold border border-sky-500/40"
-                : "hover:bg-slate-800 text-slate-300 hover:text-white"
-            }`}
-            title="Toggle Layers in Right Panel"
-          >
-            <MdLayers size={15} />
-            <span>Layers</span>
-          </button>
-
-          <div className="h-4 w-px bg-slate-800 mx-1" />
-
-          {selectedElement && (
-            <div className="flex items-center gap-1 text-[11px] text-sky-400 bg-sky-950/50 border border-sky-800/60 px-2 py-0.5 rounded">
-              <span className="font-semibold uppercase tracking-wider">{selectedElement.type?.replace('_', ' ')}</span>
-              <span className="text-slate-400">|</span>
-              <span className="text-slate-300">z: {selectedElement.z_index || 1}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Right Info in Sub-Toolbar */}
-        <div className="flex items-center gap-3 text-[11px] text-slate-400">
-          <span>{template.pages?.length || 1} Pages Total</span>
-          <span className="text-slate-600">•</span>
-          <span>Active: {currentPage?.name || `Page ${activePageIndex + 1}`}</span>
-        </div>
-      </div>
 
       {/* ==================== WORKSPACE LAYOUT ==================== */}
       <div className="flex-1 flex overflow-hidden relative">
