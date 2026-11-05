@@ -26,10 +26,11 @@ import {
   SearchOutlined,
   LockOutlined,
   ShoppingOutlined,
+  GiftOutlined,
 } from '@ant-design/icons';
 import moment from 'moment';
 
-import { addCoupen, getSingleCoupen, getAllCoupens, deleteCoupen, editCoupen } from '../../api';
+import { addCoupen, getSingleCoupen, getAllCoupens, deleteCoupen, editCoupen, getProduct } from '../../api';
 import { canEditPage, canDeletePage, isSuperAdmin } from '../../helper/permissionHelper';
 
 const { Title, Text } = Typography;
@@ -37,14 +38,19 @@ const { Option } = Select;
 const { RangePicker } = DatePicker;
 
 // ─── API helper ──────────────────────────────────────────────────────────────
-// Fetches all visible products from your existing product endpoint.
-// Adjust the base URL / axios instance to match your project setup.
+// Fetches products from your existing product endpoint.
 async function fetchAllProducts() {
-  const res = await fetch('https://api.printe.in/api/product/get_product');
-  if (!res.ok) throw new Error('Failed to fetch products');
-  const json = await res.json();
-  // The endpoint may return { data: [...] } or an array directly — handle both.
-  return Array.isArray(json) ? json : json.data ?? [];
+  try {
+    const res = await getProduct('', '', true);
+    const data = res?.data?.data || res?.data || [];
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.printe.in/api';
+    const res = await fetch(`${BASE_URL}/product/get_product?isAdmin=true`);
+    if (!res.ok) throw new Error('Failed to fetch products');
+    const json = await res.json();
+    return Array.isArray(json) ? json : json.data ?? [];
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,6 +63,8 @@ const Coupon = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCoupon, setEditingCoupon] = useState(null);
   const [searchText, setSearchText] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [updatedCouponsId, setUpdatedCouponsId] = useState('');
 
   // Product list state
@@ -96,7 +104,11 @@ const Coupon = () => {
     setProductsLoading(true);
     try {
       const data = await fetchAllProducts();
-      setProducts(data);
+      // Only list products where visibility is true
+      const visibleProducts = (Array.isArray(data) ? data : []).filter(
+        p => p.is_visible === true || p.is_visible === 'true'
+      );
+      setProducts(visibleProducts);
     } catch {
       message.error('Failed to load products list');
     } finally {
@@ -256,16 +268,34 @@ const Coupon = () => {
   };
 
   // ── Filtered data ───────────────────────────────────────────────────────────
-  const filteredCoupons = coupons.filter(c =>
-    c.code.toLowerCase().includes(searchText.toLowerCase())
-  );
+  const filteredCoupons = coupons.filter(c => {
+    const matchesSearch = c.code.toLowerCase().includes(searchText.toLowerCase());
+    const isGiveaway = Boolean(c.is_giveaway || (c.code && c.code.startsWith('PHONESTAND-')));
+    
+    let matchesType = true;
+    if (typeFilter === 'giveaway') matchesType = isGiveaway;
+    if (typeFilter === 'regular') matchesType = !isGiveaway;
+
+    let matchesStatus = true;
+    const isRedeemed = (c.usedCount || 0) >= (c.usageLimit || 1);
+    if (statusFilter === 'available') matchesStatus = !isRedeemed;
+    if (statusFilter === 'redeemed') matchesStatus = isRedeemed;
+
+    return matchesSearch && matchesType && matchesStatus;
+  });
 
   // Products available in the selector (client-side search)
   const filteredProducts = products.filter(p => {
     const q = productSearch.toLowerCase();
+    const code =
+      p.product_code ||
+      p.product_codeS_NO ||
+      p.productCode ||
+      p.variants_price?.[0]?.product_code ||
+      '';
     return (
       (p.name || '').toLowerCase().includes(q) ||
-      (p.product_code || '').toLowerCase().includes(q)
+      code.toLowerCase().includes(q)
     );
   });
 
@@ -275,7 +305,12 @@ const Coupon = () => {
       title: 'Code',
       dataIndex: 'code',
       key: 'code',
-      render: code => <Text strong>{code}</Text>,
+      render: (code, record) => (
+        <Space>
+          <Text strong copyable>{code}</Text>
+          {record.is_giveaway && <Tag color="purple">Phone Stand</Tag>}
+        </Space>
+      ),
     },
     {
       title: 'Discount Type',
@@ -380,6 +415,25 @@ const Coupon = () => {
       ),
     },
     {
+      title: 'Redemption Status',
+      key: 'redemptionStatus',
+      render: (_, record) => {
+        const isRedeemed = (record.usedCount || 0) >= (record.usageLimit || 1);
+        if (record.is_giveaway) {
+          return isRedeemed ? (
+            <Tag color="red" style={{ fontWeight: 600 }}>REDEEMED</Tag>
+          ) : (
+            <Tag color="green" style={{ fontWeight: 600 }}>AVAILABLE</Tag>
+          );
+        }
+        return isRedeemed ? (
+          <Tag color="default">USED</Tag>
+        ) : (
+          <Tag color="blue">AVAILABLE</Tag>
+        );
+      },
+    },
+    {
       title: 'Actions',
       key: 'actions',
       render: (_, record) => (
@@ -466,15 +520,37 @@ const Coupon = () => {
           </div>
         )}
 
-        {/* Search */}
-        <div style={{ marginBottom: 16 }}>
+        {/* Search & Filters */}
+        <div style={{ marginBottom: 16, display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
           <Input
             placeholder="Search coupons by code..."
             prefix={<SearchOutlined />}
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            style={{ width: 300 }}
+            style={{ width: 280 }}
+            allowClear
           />
+          <Select
+            value={typeFilter}
+            onChange={setTypeFilter}
+            style={{ width: 220 }}
+          >
+            <Option value="all">All Coupon Types</Option>
+            <Option value="giveaway">Phone Stand Giveaway Only</Option>
+            <Option value="regular">Regular Coupons Only</Option>
+          </Select>
+          <Select
+            value={statusFilter}
+            onChange={setStatusFilter}
+            style={{ width: 180 }}
+          >
+            <Option value="all">All Statuses</Option>
+            <Option value="available">Available (Unused)</Option>
+            <Option value="redeemed">Redeemed (Used)</Option>
+          </Select>
+          <Text type="secondary" style={{ marginLeft: 'auto' }}>
+            Showing {filteredCoupons.length} of {coupons.length} coupons
+          </Text>
         </div>
 
         <Table
@@ -611,9 +687,9 @@ const Coupon = () => {
                           )}
                           <div style={{ lineHeight: 1.3 }}>
                             <div style={{ fontWeight: 500, fontSize: 13 }}>{product.name}</div>
-                            {product.product_code && (
+                            {(product.product_code || product.product_codeS_NO || product.variants_price?.[0]?.product_code) && (
                               <div style={{ fontSize: 11, color: '#888' }}>
-                                Code: {product.product_code}
+                                Code: {product.product_code || product.product_codeS_NO || product.variants_price?.[0]?.product_code}
                               </div>
                             )}
                           </div>

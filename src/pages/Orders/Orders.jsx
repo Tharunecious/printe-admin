@@ -1062,6 +1062,29 @@ const Orders = () => {
                           </div>
                         </div>
 
+                        {(() => {
+                          const customName =
+                            _.get(order, "customized_name") ||
+                            _.get(order, "phone_stand_details.customized_name") ||
+                            _.get(order, "cart_items[0].customized_name") ||
+                            _.get(order, "cart_items.customized_name") ||
+                            (Array.isArray(order?.cart_items) && order.cart_items.find(i => i.customized_name)?.customized_name);
+                          const couponCode =
+                            _.get(order, "giveaway_coupon") ||
+                            _.get(order, "coupon.code") ||
+                            _.get(order, "phone_stand_details.coupon_code") ||
+                            _.get(order, "cart_items[0].giveaway_coupon");
+                          return customName ? (
+                            <div className="mb-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md flex items-center justify-between text-xs">
+                              <div>
+                                <span className="font-semibold text-blue-800 mr-2">Customized Name:</span>
+                                <span className="font-bold text-blue-900 text-sm">{customName}</span>
+                              </div>
+                              {couponCode && <Tag color="purple" className="m-0">Coupon: {couponCode}</Tag>}
+                            </div>
+                          ) : null;
+                        })()}
+
                         <div className="mb-4">
                           <div className="flex justify-between text-sm text-gray-600 mb-1">
                             <span>Order Progress</span>
@@ -1906,6 +1929,40 @@ const Orders = () => {
               </Descriptions.Item>
             </Descriptions>
 
+            {(
+              _.get(currentOrder, "customized_name") ||
+              _.get(currentOrder, "phone_stand_details.customized_name") ||
+              _.get(currentOrder, "cart_items[0].customized_name") ||
+              _.get(currentOrder, "cart_items.customized_name") ||
+              (Array.isArray(currentOrder?.cart_items) && currentOrder.cart_items.find(i => i.customized_name)?.customized_name)
+            ) && (
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-blue-600 font-semibold uppercase tracking-wider">
+                    Customized Name (Phone Stand)
+                  </div>
+                  {(_.get(currentOrder, "giveaway_coupon") ||
+                    _.get(currentOrder, "coupon.code") ||
+                    _.get(currentOrder, "phone_stand_details.coupon_code") ||
+                    _.get(currentOrder, "cart_items[0].giveaway_coupon")) && (
+                    <Tag color="purple">
+                      Coupon: {_.get(currentOrder, "giveaway_coupon") ||
+                        _.get(currentOrder, "coupon.code") ||
+                        _.get(currentOrder, "phone_stand_details.coupon_code") ||
+                        _.get(currentOrder, "cart_items[0].giveaway_coupon")}
+                    </Tag>
+                  )}
+                </div>
+                <div className="text-base font-bold text-blue-900 mt-1">
+                  {_.get(currentOrder, "customized_name") ||
+                    _.get(currentOrder, "phone_stand_details.customized_name") ||
+                    _.get(currentOrder, "cart_items[0].customized_name") ||
+                    _.get(currentOrder, "cart_items.customized_name") ||
+                    (Array.isArray(currentOrder?.cart_items) && currentOrder.cart_items.find(i => i.customized_name)?.customized_name)}
+                </div>
+              </div>
+            )}
+
             {/* Photo Frame Images section - shows whenever father/son images exist, with individual + bulk download */}
             {getPhotoFrameImages(currentOrder).length > 0 && (
               <>
@@ -1960,6 +2017,8 @@ const Orders = () => {
                       </div>
                     ))}
                   </div>
+
+
                   {(_.get(currentOrder, "cart_items[0].photo_frame_details.father_name") ||
                     _.get(currentOrder, "cart_items[0].photo_frame_details.son_name") ||
                     _.get(currentOrder, "cart_items[0].photo_frame_details.unique_message")) && (

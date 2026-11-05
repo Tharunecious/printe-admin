@@ -470,7 +470,22 @@ const AssignedOrder = () => {
       title: "Invoice No",
       dataIndex: "invoice_no",
       key: "invoice",
-      render: (text) => <span className="font-medium">{text}</span>,
+      render: (text, record) => {
+        const customName =
+          record.customized_name ||
+          record.phone_stand_details?.customized_name ||
+          record.cart_items?.[0]?.customized_name;
+        return (
+          <div className="flex flex-col">
+            <span className="font-medium">{text}</span>
+            {customName && (
+              <span className="text-xs text-blue-600 font-semibold">
+                Name: {customName}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: "Amount",

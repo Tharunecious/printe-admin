@@ -89,6 +89,29 @@ const OrderExplore = () => {
               <div>{_.get(filterOrderData, "cart_items.product_name", "")}</div>
               <div>{_.get(filterOrderData, "cart_items.product_seo_url", "")}</div>
             </h3>
+            {(_.get(filterOrderData, "cart_items.customized_name") ||
+    _.get(filterOrderData, "cart_items[0].customized_name") ||
+    _.get(filterOrderData, "customized_name") ||
+    _.get(filterOrderData, "phone_stand_details.customized_name") ||
+    (Array.isArray(filterOrderData?.cart_items) && filterOrderData.cart_items.find(i => i.customized_name)?.customized_name)) && (
+              <div className="mt-2 p-1.5 bg-blue-50 border border-blue-200 rounded text-xs">
+                <strong>Customized Name:</strong>{" "}
+                <span className="text-blue-700 font-bold">
+                  {_.get(filterOrderData, "cart_items.customized_name") ||
+    _.get(filterOrderData, "cart_items[0].customized_name") ||
+    _.get(filterOrderData, "customized_name") ||
+    _.get(filterOrderData, "phone_stand_details.customized_name") ||
+    (Array.isArray(filterOrderData?.cart_items) && filterOrderData.cart_items.find(i => i.customized_name)?.customized_name)}
+                </span>
+              </div>
+            )}
+            {(_.get(filterOrderData, "cart_items.giveaway_coupon") || _.get(filterOrderData, "cart_items[0].giveaway_coupon") || _.get(filterOrderData, "giveaway_coupon") || _.get(filterOrderData, "coupon.code")) && (
+              <div className="mt-1">
+                <Tag color="purple">
+                  Coupon: {_.get(filterOrderData, "cart_items.giveaway_coupon") || _.get(filterOrderData, "cart_items[0].giveaway_coupon") || _.get(filterOrderData, "giveaway_coupon") || _.get(filterOrderData, "coupon.code")}
+                </Tag>
+              </div>
+            )}
           </div>
         </div>
       ),
