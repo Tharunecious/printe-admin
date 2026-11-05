@@ -126,6 +126,7 @@ const TemplateList = () => {
         default_pages: found.default_pages || 20,
         min_pages: found.min_pages || 10,
         max_pages: found.max_pages || 60,
+        exact_pages: found.exact_pages || found.default_pages || 20,
       });
     }
   };
@@ -184,12 +185,17 @@ const TemplateList = () => {
           .toLowerCase()
           .replace(/[^a-z0-9]/g, "_")}_${Date.now().toString().slice(-4)}`;
 
+      const isGiveaway = Boolean(selectedProductTemplate?.is_giveaway);
+      const exactPages = Number(values.exact_pages || selectedProductTemplate?.exact_pages || selectedProductTemplate?.default_pages || values.default_pages || 20);
+
       const payload = {
         template_name: values.template_name || selectedProductTemplate.template_name,
         template_id: targetSlug,
         category: values.category || selectedProductTemplate?.category || "General",
         badge: selectedProductTemplate?.badge || "",
         description: values.description || selectedProductTemplate?.description || "",
+        is_giveaway: isGiveaway,
+        exact_pages: exactPages,
         thumbnail_url:
           selectedProductTemplate?.cover_image_url || selectedProductTemplate?.thumbnail_url || "",
         cover_image_url:
@@ -198,9 +204,11 @@ const TemplateList = () => {
         product_template_id: selectedProductTemplate?.product_template_id || selectedProductTemplate?.slug || null,
         supported_sizes: values.supported_sizes || selectedProductTemplate?.supported_sizes || ["A4", "A5", "12x12 inch", "A3"],
         page_config: {
-          min_pages: Number(values.min_pages || selectedProductTemplate?.min_pages || 10),
-          max_pages: Number(values.max_pages || selectedProductTemplate?.max_pages || 60),
-          default_pages: Number(values.default_pages || selectedProductTemplate?.default_pages || 20),
+          is_giveaway: isGiveaway,
+          exact_pages: exactPages,
+          min_pages: isGiveaway ? exactPages : Number(values.min_pages || selectedProductTemplate?.min_pages || 10),
+          max_pages: isGiveaway ? exactPages : Number(values.max_pages || selectedProductTemplate?.max_pages || 60),
+          default_pages: isGiveaway ? exactPages : Number(values.default_pages || selectedProductTemplate?.default_pages || 20),
           aspect_ratio: values.aspect_ratio || "1:1",
         },
       };
@@ -710,21 +718,39 @@ const TemplateList = () => {
               className="space-y-3"
             >
               {/* Linked Configuration Summary Banner */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 space-y-1">
-                <div className="font-semibold flex items-center justify-between">
-                  <span>Linked Commercial Configuration:</span>
-                  <Tag color="green" className="m-0 text-[10px]">
-                    Product: {selectedProductTemplate.product_name}
-                  </Tag>
+              {selectedProductTemplate.is_giveaway ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-1">
+                  <div className="font-semibold flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-bold">
+                      <Tag color="gold" className="m-0 text-[10px] font-bold">Giveaway Template</Tag>
+                      Linked Product: {selectedProductTemplate.product_name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-amber-800">
+                    <span>Exact Pages: <strong>{selectedProductTemplate.exact_pages || selectedProductTemplate.default_pages || 20}</strong></span>
+                    <span>•</span>
+                    <span>No editions required</span>
+                    <span>•</span>
+                    <span>Free Giveaway</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] text-emerald-800">
-                  <span>Pages: {selectedProductTemplate.default_pages} default ({selectedProductTemplate.min_pages}–{selectedProductTemplate.max_pages})</span>
-                  <span>•</span>
-                  <span>Extra page: ₹{selectedProductTemplate.price_per_extra_page}</span>
-                  <span>•</span>
-                  <span>{selectedProductTemplate.editions?.length || 0} Edition(s)</span>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900 space-y-1">
+                  <div className="font-semibold flex items-center justify-between">
+                    <span>Linked Commercial Configuration:</span>
+                    <Tag color="green" className="m-0 text-[10px]">
+                      Product: {selectedProductTemplate.product_name}
+                    </Tag>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px] text-emerald-800">
+                    <span>Pages: {selectedProductTemplate.default_pages} default ({selectedProductTemplate.min_pages}–{selectedProductTemplate.max_pages})</span>
+                    <span>•</span>
+                    <span>Extra page: ₹{selectedProductTemplate.price_per_extra_page}</span>
+                    <span>•</span>
+                    <span>{selectedProductTemplate.editions?.length || 0} Edition(s)</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <Form.Item
                 name="template_name"
@@ -764,17 +790,28 @@ const TemplateList = () => {
                 <Checkbox.Group options={BOOK_SIZES} />
               </Form.Item>
 
-              <div className="grid grid-cols-3 gap-3">
-                <Form.Item name="default_pages" label="Default Pages">
-                  <Input type="number" min={10} max={100} />
+              {selectedProductTemplate.is_giveaway ? (
+                <Form.Item
+                  name="exact_pages"
+                  label={<span className="font-bold">Exact Book Pages</span>}
+                  extra="Specified page count determines the exact number of pages available in the customer book."
+                  initialValue={selectedProductTemplate.exact_pages || selectedProductTemplate.default_pages || 20}
+                >
+                  <Input type="number" min={4} max={100} step={2} />
                 </Form.Item>
-                <Form.Item name="min_pages" label="Min Pages">
-                  <Input type="number" min={10} max={50} />
-                </Form.Item>
-                <Form.Item name="max_pages" label="Max Pages">
-                  <Input type="number" min={20} max={100} />
-                </Form.Item>
-              </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3">
+                  <Form.Item name="default_pages" label="Default Pages">
+                    <Input type="number" min={10} max={100} />
+                  </Form.Item>
+                  <Form.Item name="min_pages" label="Min Pages">
+                    <Input type="number" min={10} max={50} />
+                  </Form.Item>
+                  <Form.Item name="max_pages" label="Max Pages">
+                    <Input type="number" min={20} max={100} />
+                  </Form.Item>
+                </div>
+              )}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                 <Button onClick={() => setCreateModalOpen(false)}>Cancel</Button>

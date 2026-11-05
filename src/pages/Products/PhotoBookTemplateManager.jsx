@@ -104,6 +104,8 @@ export const PhotoBookTemplateManager = ({
       cover_image_url: "",
       thumbnail_url: "",
       storefront_visibility: true,
+      is_giveaway: false,
+      exact_pages: 20,
       default_pages: 20,
       min_pages: 10,
       max_pages: 60,
@@ -131,6 +133,8 @@ export const PhotoBookTemplateManager = ({
       cover_image_url: coverUrl,
       thumbnail_url: coverUrl,
       storefront_visibility: isVisible,
+      is_giveaway: Boolean(tpl.is_giveaway),
+      exact_pages: Number(tpl.exact_pages || tpl.default_pages || 20),
       default_pages: Number(tpl.default_pages || tpl.page_config?.default_pages || 20),
       min_pages: Number(tpl.min_pages || tpl.page_config?.min_pages || 10),
       max_pages: Number(tpl.max_pages || tpl.page_config?.max_pages || 60),
@@ -204,13 +208,26 @@ export const PhotoBookTemplateManager = ({
 
       const coverUrl = values.cover_image_url || values.thumbnail_url || "";
       const isVisible = values.storefront_visibility !== false;
+      const isGiveaway = Boolean(values.is_giveaway);
+      const exactPages = Number(values.exact_pages || values.default_pages) || 20;
 
-      const pageLimits = {
-        default_pages: Number(values.default_pages) || 20,
-        min_pages: Number(values.min_pages) || 10,
-        max_pages: Number(values.max_pages) || 60,
-        price_per_extra_page: Number(values.price_per_extra_page) || 15,
-      };
+      const pageLimits = isGiveaway
+        ? {
+            is_giveaway: true,
+            exact_pages: exactPages,
+            default_pages: exactPages,
+            min_pages: exactPages,
+            max_pages: exactPages,
+            price_per_extra_page: 0,
+          }
+        : {
+            is_giveaway: false,
+            exact_pages: 0,
+            default_pages: Number(values.default_pages) || 20,
+            min_pages: Number(values.min_pages) || 10,
+            max_pages: Number(values.max_pages) || 60,
+            price_per_extra_page: Number(values.price_per_extra_page) || 15,
+          };
 
       if (editingTemplate) {
         // Edit existing template
@@ -742,6 +759,11 @@ export const PhotoBookTemplateManager = ({
                             {tpl.category}
                           </Tag>
                         )}
+                        {tpl.is_giveaway && (
+                          <Tag color="gold" className="text-[10px] m-0 font-bold">
+                            Giveaway ({tpl.exact_pages || tpl.default_pages || 20}p)
+                          </Tag>
+                        )}
                         <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
                           slug: {tpl.slug || tpl.template_code || tpl.template_id}
                         </span>
@@ -938,51 +960,97 @@ export const PhotoBookTemplateManager = ({
               />
             </Form.Item>
 
-            {/* Template Page Limits & Pricing */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 mb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-semibold text-gray-800 text-xs block">Page Limits & Extra Page Surcharge</span>
-                  <span className="text-[11px] text-gray-500">
-                    Template-specific default pages, min/max limits and extra page surcharge
-                  </span>
-                </div>
+            {/* Giveaway Template Switch */}
+            <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 flex items-center justify-between mb-4">
+              <div>
+                <span className="font-semibold text-gray-800 text-xs block">Giveaway / Free Photo Book Template</span>
+                <span className="text-[11px] text-gray-600">
+                  Enable for giveaway photobooks with exact page count. No edition configuration or extra page surcharges needed.
+                </span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                <Form.Item
-                  name="default_pages"
-                  label={<span className="text-[11px] font-medium text-gray-700">Default Pages</span>}
-                  initialValue={20}
-                  rules={[{ required: true, message: "Required" }]}
-                >
-                  <InputNumber min={4} max={200} className="w-full h-9" />
-                </Form.Item>
-                <Form.Item
-                  name="min_pages"
-                  label={<span className="text-[11px] font-medium text-gray-700">Min Pages</span>}
-                  initialValue={10}
-                  rules={[{ required: true, message: "Required" }]}
-                >
-                  <InputNumber min={4} max={100} className="w-full h-9" />
-                </Form.Item>
-                <Form.Item
-                  name="max_pages"
-                  label={<span className="text-[11px] font-medium text-gray-700">Max Pages</span>}
-                  initialValue={60}
-                  rules={[{ required: true, message: "Required" }]}
-                >
-                  <InputNumber min={10} max={300} className="w-full h-9" />
-                </Form.Item>
-                <Form.Item
-                  name="price_per_extra_page"
-                  label={<span className="text-[11px] font-medium text-gray-700">Extra Page (₹)</span>}
-                  initialValue={15}
-                  rules={[{ required: true, message: "Required" }]}
-                >
-                  <InputNumber min={0} step={1} className="w-full h-9" />
-                </Form.Item>
-              </div>
+              <Form.Item name="is_giveaway" valuePropName="checked" noStyle>
+                <Switch checkedChildren="Giveaway" unCheckedChildren="Paid" />
+              </Form.Item>
             </div>
+
+            {/* Template Page Limits & Pricing (Conditional based on is_giveaway) */}
+            <Form.Item
+              noStyle
+              shouldUpdate={(prevValues, currentValues) =>
+                prevValues.is_giveaway !== currentValues.is_giveaway
+              }
+            >
+              {({ getFieldValue }) => {
+                const isGiveawayMode = Boolean(getFieldValue("is_giveaway"));
+                if (isGiveawayMode) {
+                  return (
+                    <div className="p-3.5 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2 mb-4">
+                      <div>
+                        <span className="font-semibold text-amber-900 text-xs block">Exact Page Count</span>
+                        <span className="text-[11px] text-amber-700">
+                          Specifies the exact page count available in the customer book. No min/max limits or extra page charges.
+                        </span>
+                      </div>
+                      <Form.Item
+                        name="exact_pages"
+                        label={<span className="text-[11px] font-bold text-gray-700">Exact Book Pages</span>}
+                        initialValue={20}
+                        rules={[{ required: true, message: "Required" }]}
+                      >
+                        <InputNumber min={4} max={100} step={2} className="w-full h-9 font-bold" />
+                      </Form.Item>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 mb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold text-gray-800 text-xs block">Page Limits & Extra Page Surcharge</span>
+                        <span className="text-[11px] text-gray-500">
+                          Template-specific default pages, min/max limits and extra page surcharge
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                      <Form.Item
+                        name="default_pages"
+                        label={<span className="text-[11px] font-medium text-gray-700">Default Pages</span>}
+                        initialValue={20}
+                        rules={[{ required: true, message: "Required" }]}
+                      >
+                        <InputNumber min={4} max={200} className="w-full h-9" />
+                      </Form.Item>
+                      <Form.Item
+                        name="min_pages"
+                        label={<span className="text-[11px] font-medium text-gray-700">Min Pages</span>}
+                        initialValue={10}
+                        rules={[{ required: true, message: "Required" }]}
+                      >
+                        <InputNumber min={4} max={100} className="w-full h-9" />
+                      </Form.Item>
+                      <Form.Item
+                        name="max_pages"
+                        label={<span className="text-[11px] font-medium text-gray-700">Max Pages</span>}
+                        initialValue={60}
+                        rules={[{ required: true, message: "Required" }]}
+                      >
+                        <InputNumber min={10} max={300} className="w-full h-9" />
+                      </Form.Item>
+                      <Form.Item
+                        name="price_per_extra_page"
+                        label={<span className="text-[11px] font-medium text-gray-700">Extra Page (₹)</span>}
+                        initialValue={15}
+                        rules={[{ required: true, message: "Required" }]}
+                      >
+                        <InputNumber min={0} step={1} className="w-full h-9" />
+                      </Form.Item>
+                    </div>
+                  </div>
+                );
+              }}
+            </Form.Item>
 
             <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 flex items-center justify-between">
               <div>
@@ -1070,6 +1138,17 @@ export const PhotoBookTemplateManager = ({
             ),
             children: (
               <div className="space-y-4 pt-1">
+                {activeTemplate.is_giveaway && (
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between">
+                    <div>
+                      <span className="font-bold block">Giveaway Template</span>
+                      <span>
+                        This template is configured as a Giveaway Photo Book. Edition configurations and extra page pricing are not required. The customer book will contain exactly {activeTemplate.exact_pages || activeTemplate.default_pages || 20} pages.
+                      </span>
+                    </div>
+                    <Tag color="gold" className="font-semibold text-xs">Giveaway</Tag>
+                  </div>
+                )}
                 {/* Editions Header */}
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-gray-500">
