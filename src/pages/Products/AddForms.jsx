@@ -1100,6 +1100,15 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
   
   const variantPrices = Form.useWatch('variants_price', form) || [];
   const watchedMRP = Form.useWatch('MRP_price', form) || 0;
+  const watchedProductCode = Form.useWatch('product_code', form) || '';
+  const watchedProductCodeSNO = Form.useWatch('product_codeS_NO', form) || '';
+
+  const isPS0511Product =
+    String(watchedProductCode).trim().toUpperCase() === "PS0511" ||
+    String(watchedProductCodeSNO).trim().toUpperCase() === "PS0511" ||
+    String(id?.product_code || "").trim().toUpperCase() === "PS0511" ||
+    String(id?.product_codeS_NO || "").trim().toUpperCase() === "PS0511" ||
+    (Array.isArray(id?.variants_price) && id.variants_price.some(vp => String(vp?.product_code || "").trim().toUpperCase() === "PS0511"));
 
   const userRole = JSON.parse(localStorage.getItem("userprofile") || '{"role": "user"}');
   const hasImageVariant = variants.some(variant => 
@@ -1154,6 +1163,7 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
         vendor_details: _.get(id, "vendor_details._id",""),
         category_details: categoryId,
         sub_category_details: _.get(id, "sub_category_details._id", ""),
+        customization_name_price: id.customization_name_price !== undefined ? id.customization_name_price : 10,
         stock_info: [],
       };
 
@@ -1992,6 +2002,12 @@ const handleFinish = async (values) => {
 
     values.seo_url = String(values.seo_url).trim();
     
+    if (values.customization_name_price !== undefined && values.customization_name_price !== "") {
+      values.customization_name_price = Number(values.customization_name_price);
+    } else if (isPS0511Product) {
+      values.customization_name_price = 10;
+    }
+
     // Get SEO image from available images
     values.seo_img = getFirstAvailableImage(values);
     console.log("SEO Image URL:", values.seo_img);
@@ -2816,6 +2832,35 @@ const handleFinish = async (values) => {
                   </>
                 )}
               </>
+            )}
+
+            {isPS0511Product && (
+              <div className="mt-4 p-4 bg-amber-50 rounded-lg border border-amber-300">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">🎁</span>
+                  <div>
+                    <h4 className="font-semibold text-amber-900 text-sm m-0">Phone Stand (PS0511) Customization Pricing</h4>
+                    <p className="text-xs text-amber-700 m-0">
+                      Set the price charged for each customized name per unit when no giveaway coupon is applied.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Form.Item
+                    name="customization_name_price"
+                    label="Customization name price (₹ per unit)"
+                    tooltip="For each customized name, the price charged per quantity (default: ₹10). For example, if 50 quantity then 500 will be customization charge."
+                    rules={[{ required: true, message: "Enter Customization name price" }]}
+                  >
+                    <Input
+                      placeholder="Enter Customization name price (e.g. 10)"
+                      type="number"
+                      min={0}
+                      className="h-12"
+                    />
+                  </Form.Item>
+                </div>
+              </div>
             )}
           </Panel>
 
