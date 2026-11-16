@@ -1,15 +1,28 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Modal, Spin, Tag, Button, message } from "antd";
 import {
   MdChevronLeft,
   MdChevronRight,
   MdOutlineAutoStories,
   MdClose,
-  MdLayers,
+  MdOutlineLightMode,
+  MdOutlineDarkMode,
 } from "react-icons/md";
 import { FiDownload } from "react-icons/fi";
 import { getPhotoBookDesign, getPhotoBookTemplateById } from "../../api";
 import { exportPhotoBookOrderZip } from "../../helper/photobookExportHelper";
+import {
+  buildSizeInfo,
+  PRESET_STUDIO_SIZES,
+} from "../PhotoBook/utils/sizeUtils";
+import {
+  getFontFamilyFallback,
+  PRESET_DECORATIONS,
+} from "../PhotoBook/utils/presetAssets";
+import {
+  getElementCoords,
+  calculateDynamicTextDimensions,
+} from "../PhotoBook/utils/textUtils";
 
 // ── Google Fonts dynamic stylesheet injector ─────────────────────────────────
 const GOOGLE_FONTS_LIST = [
@@ -33,6 +46,9 @@ const GOOGLE_FONTS_LIST = [
   "Pinyon Script",
   "Marcellus",
   "Bodoni Moda",
+  "Inter",
+  "Jost",
+  "Roboto",
 ];
 
 const injectGoogleFonts = () => {
@@ -48,121 +64,6 @@ const injectGoogleFonts = () => {
     link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
     document.head.appendChild(link);
   }
-};
-
-// ── Fallback font family mappings ─────────────────────────────────────────────
-const FONT_FALLBACK_MAP = {
-  "Playfair Display": "'Playfair Display', serif",
-  Montserrat: "'Montserrat', sans-serif",
-  "Great Vibes": "'Great Vibes', cursive",
-  "Dancing Script": "'Dancing Script', cursive",
-  Cinzel: "'Cinzel', serif",
-  "Cormorant Garamond": "'Cormorant Garamond', serif",
-  "Alex Brush": "'Alex Brush', cursive",
-  Lora: "'Lora', serif",
-  Merriweather: "'Merriweather', serif",
-  Oswald: "'Oswald', sans-serif",
-  Raleway: "'Raleway', sans-serif",
-  Pacifico: "'Pacifico', cursive",
-  Caveat: "'Caveat', cursive",
-  Allura: "'Allura', cursive",
-  Parisienne: "'Parisienne', cursive",
-  "Abril Fatface": "'Abril Fatface', cursive",
-  Italianno: "'Italianno', cursive",
-  "Pinyon Script": "'Pinyon Script', cursive",
-  Marcellus: "'Marcellus', serif",
-  "Bodoni Moda": "'Bodoni Moda', serif",
-};
-
-const getFontFamilyFallback = (fontName) => {
-  if (!fontName) return "'Playfair Display', serif";
-  return FONT_FALLBACK_MAP[fontName] || `'${fontName}', sans-serif`;
-};
-
-// ── Element normalized coordinates helper ─────────────────────────────────────
-const getElementCoords = (el) => {
-  if (!el) return { left: 0, top: 0, width: 100, height: 100 };
-
-  const parseCoord = (val, pctVal, normVal, defaultPct = 0) => {
-    if (pctVal !== undefined && pctVal !== null && !isNaN(Number(pctVal))) {
-      return Number(pctVal);
-    }
-    if (normVal !== undefined && normVal !== null && !isNaN(Number(normVal))) {
-      return +(Number(normVal) * 100).toFixed(4);
-    }
-    if (typeof val === "string") {
-      const trimmed = val.trim();
-      if (trimmed.endsWith("%")) {
-        const num = parseFloat(trimmed);
-        if (!isNaN(num)) return num;
-      }
-      const num = parseFloat(trimmed);
-      if (!isNaN(num)) val = num;
-    }
-    if (typeof val === "number" && !isNaN(val)) {
-      if ((el.unit === "%" || el.is_percentage) && val <= 100) {
-        return val;
-      }
-      if (val > 100) {
-        return +((val / 1000) * 100).toFixed(4);
-      }
-      if (val > 0 && val <= 1) {
-        return +(val * 100).toFixed(4);
-      }
-      if (Number(el.width) > 100 || Number(el.height) > 100) {
-        return +((val / 1000) * 100).toFixed(4);
-      }
-      return val;
-    }
-    return defaultPct;
-  };
-
-  const parseDimension = (val, pctVal, normVal, defaultPct = 100) => {
-    if (pctVal !== undefined && pctVal !== null && !isNaN(Number(pctVal))) {
-      return Number(pctVal);
-    }
-    if (normVal !== undefined && normVal !== null && !isNaN(Number(normVal))) {
-      return +(Number(normVal) * 100).toFixed(4);
-    }
-    if (typeof val === "string") {
-      const trimmed = val.trim();
-      if (trimmed.endsWith("%")) {
-        const num = parseFloat(trimmed);
-        if (!isNaN(num)) return num;
-      }
-      const num = parseFloat(trimmed);
-      if (!isNaN(num)) val = num;
-    }
-    if (typeof val === "number" && !isNaN(val)) {
-      if ((el.unit === "%" || el.is_percentage) && val <= 100) {
-        return val;
-      }
-      if (val > 100) {
-        return +((val / 1000) * 100).toFixed(4);
-      }
-      if (val > 0 && val <= 1) {
-        return +(val * 100).toFixed(4);
-      }
-      return val;
-    }
-    return defaultPct;
-  };
-
-  let left = parseCoord(el.x, el.x_pct, el.x_norm, 0);
-  let top = parseCoord(el.y, el.y_pct, el.y_norm, 0);
-  let width = parseDimension(el.width, el.width_pct, el.w_norm, 100);
-  let height = parseDimension(el.height, el.height_pct, el.h_norm, 100);
-
-  if (el.type === "decoration" || el.type === "text") {
-    return { left, top, width, height };
-  }
-
-  left = Math.max(-100, Math.min(200, left));
-  top = Math.max(-100, Math.min(200, top));
-  width = Math.max(1, width);
-  height = Math.max(1, height);
-
-  return { left, top, width, height };
 };
 
 // ── SVG Mask / Shape Paths (0.0 to 1.0 objectBoundingBox) ─────────────────────
@@ -229,7 +130,7 @@ const getShapeClipPathDefinition = (shape = "rectangle", radiusVal = 0) => {
   }
 };
 
-const renderShapeSvgClip = (def, isClip = false) => {
+const renderShapeSvgClip = (def) => {
   if (!def) return <rect x="0" y="0" width="1" height="1" />;
   if (def.type === "circle") {
     return <circle cx={def.cx} cy={def.cy} r={def.r} />;
@@ -259,46 +160,13 @@ const resolveDecorationSvg = (el) => {
   if (shape === "star" || el.custom_svg_path === "star") {
     return `<svg viewBox="0 0 100 100" fill="currentColor"><path d="M 50,2 L 64,32 L 98,35 L 72,58 L 80,92 L 50,74 L 20,92 L 28,58 L 2,35 L 36,32 Z" /></svg>`;
   }
-  if (shape === "butterfly") {
+  if (shape === "butterfly" || el.custom_svg_path === "butterfly") {
     return `<svg viewBox="0 0 100 100" fill="currentColor"><path d="M50 45 C40 10 5 15 15 50 C20 65 40 60 50 55 C60 60 80 65 85 50 C95 15 60 10 50 45 Z M50 55 C42 65 30 90 45 92 C55 90 52 70 50 55 M50 55 C58 65 70 90 55 92 C45 90 48 70 50 55" /></svg>`;
   }
-  if (shape === "flower") {
+  if (shape === "flower" || el.custom_svg_path === "flower") {
     return `<svg viewBox="0 0 100 100" fill="currentColor"><circle cx="50" cy="50" r="15" fill="#f59e0b"/><circle cx="50" cy="20" r="16"/><circle cx="50" cy="80" r="16"/><circle cx="20" cy="50" r="16"/><circle cx="80" cy="50" r="16"/></svg>`;
   }
   return null;
-};
-
-// ── Size Formatter Helper ─────────────────────────────────────────────────────
-const formatBookSizeInches = (rawSize, configSizes = []) => {
-  if (!rawSize) return "A4 - 8.27 x 11.69 in";
-  const sStr = String(rawSize).trim();
-  if (/\d+(\.\d+)?\s*x\s*\d+(\.\d+)?\s*in/i.test(sStr)) {
-    return sStr;
-  }
-  if (configSizes && configSizes.length > 0) {
-    const matched = configSizes.find(
-      (s) =>
-        String(s._id) === sStr ||
-        String(s.id) === sStr ||
-        String(s.name).toLowerCase() === sStr.toLowerCase()
-    );
-    if (matched) {
-      const w = matched.width_in || matched.width;
-      const h = matched.height_in || matched.height;
-      if (w && h) return `${matched.name || sStr} - ${w} x ${h} in`;
-      if (matched.name) return matched.name;
-    }
-  }
-  if (sStr.toLowerCase().includes("a4") || sStr.startsWith("size-")) {
-    return "A4 - 8.27 x 11.69 in";
-  }
-  if (sStr.includes("8x8") || sStr.toLowerCase().includes("square")) {
-    return "8x8 Square - 8.00 x 8.00 in";
-  }
-  if (sStr.includes("12x12")) {
-    return "12x12 Square - 12.00 x 12.00 in";
-  }
-  return sStr;
 };
 
 // ── Pure Page Canvas Renderer (100% Identical Visual Fidelity) ────────────────
@@ -353,8 +221,8 @@ const PhotobookPageCanvas = ({ page }) => {
 
   return (
     <div
-      className="page-canvas-container relative w-full h-full overflow-hidden select-none bg-white"
-      style={{ containerType: "inline-size" }}
+      className="page-canvas-container relative w-full h-full overflow-hidden select-none bg-white isolate"
+      style={{ containerType: "inline-size", isolation: "isolate" }}
     >
       {/* Background layer */}
       <div style={bgLayerStyle} />
@@ -442,7 +310,7 @@ const PhotobookPageCanvas = ({ page }) => {
               <svg width="0" height="0" className="absolute pointer-events-none">
                 <defs>
                   <clipPath id={clipId} clipPathUnits="objectBoundingBox">
-                    {renderShapeSvgClip(clipDef, false)}
+                    {renderShapeSvgClip(clipDef)}
                   </clipPath>
                 </defs>
               </svg>
@@ -508,9 +376,10 @@ const PhotobookPageCanvas = ({ page }) => {
                     transform="scale(100, 100)"
                     fill="none"
                     stroke={borderColor}
-                    strokeWidth={borderWidth / elRefDim}
+                    strokeWidth={normalizedBorderStroke}
+                    vectorEffect="non-scaling-stroke"
                   >
-                    {renderShapeSvgClip(clipDef, false)}
+                    {renderShapeSvgClip(clipDef)}
                   </g>
                 </svg>
               )}
@@ -522,6 +391,9 @@ const PhotobookPageCanvas = ({ page }) => {
         if (el.type === "text") {
           const hasExplicitNewlines =
             el.content && String(el.content).includes("\n");
+          const effectiveTextTransform =
+            el.text_transform || el.textTransform || "none";
+
           return (
             <div
               key={elKey}
@@ -535,6 +407,7 @@ const PhotobookPageCanvas = ({ page }) => {
                 fontSize: `calc(${Number(el.font_size || 24)} * (100cqw / 707))`,
                 fontWeight: el.font_weight || "normal",
                 fontStyle: el.font_style || "normal",
+                textTransform: effectiveTextTransform,
                 letterSpacing: el.letter_spacing
                   ? `calc(${Number(el.letter_spacing)} * (100cqw / 707))`
                   : "normal",
@@ -585,6 +458,7 @@ const PhotobookPageCanvas = ({ page }) => {
                   fontWeight: "inherit",
                   fontStyle: "inherit",
                   letterSpacing: "inherit",
+                  textTransform: effectiveTextTransform,
                 }}
               >
                 {el.content}
@@ -598,6 +472,10 @@ const PhotobookPageCanvas = ({ page }) => {
           const svgContent = resolveDecorationSvg(el);
           const hasSvg = Boolean(svgContent);
           const hasAsset = Boolean(el.asset_url);
+          const isExplicitButterfly =
+            el.shape === "butterfly" || el.custom_svg_path === "butterfly";
+          const isExplicitHeart =
+            el.shape === "heart" || el.custom_svg_path === "heart";
 
           return (
             <div
@@ -613,15 +491,31 @@ const PhotobookPageCanvas = ({ page }) => {
               <div className="w-full h-full flex items-center justify-center pointer-events-none">
                 {hasSvg ? (
                   <div
-                    className="w-full h-full flex items-center justify-center fill-current"
+                    className="w-full h-full flex items-center justify-center fill-current [&>svg]:w-full [&>svg]:h-full"
                     dangerouslySetInnerHTML={{ __html: svgContent }}
                   />
                 ) : hasAsset ? (
                   <img
                     src={el.asset_url}
-                    alt=""
-                    className="w-full h-full object-contain pointer-events-none"
+                    alt={el.name || "Decoration"}
+                    className="w-full h-full object-contain pointer-events-none select-none"
                   />
+                ) : isExplicitButterfly ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill={el.tint || "#f43f5e"}
+                    className="w-full h-full drop-shadow"
+                  >
+                    <path d="M12 4.5C12.5 3 14 2 16 2c2.5 0 4.5 2 4.5 4.5 0 2.5-2.5 4.5-5 5.5 3 .5 5.5 2.5 5.5 5.5 0 3-2.5 5.5-5.5 5.5-2 0-3.5-1-4-2.5-.5 1.5-2 2.5-4 2.5C4.5 23 2 20.5 2 17.5c0-3 2.5-5 5.5-5.5-2.5-1-5-3-5-5.5C2.5 4 4.5 2 7 2c2 0 3.5 1 4 2.5l1 1 1-1z" />
+                  </svg>
+                ) : isExplicitHeart ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill={el.tint || "#ec4899"}
+                    className="w-full h-full drop-shadow"
+                  >
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                  </svg>
                 ) : (
                   <div className="w-full h-full border border-dashed border-amber-300 rounded-sm opacity-50" />
                 )}
@@ -650,6 +544,8 @@ const RealisticBookPreview = ({
   const [flipDirection, setFlipDirection] = useState("next"); // "next" | "prev"
   const [transitionData, setTransitionData] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [previewTheme, setPreviewTheme] = useState("dark"); // "dark" | "light"
+  const isDark = previewTheme === "dark";
 
   const handleDownloadZip = async () => {
     if (!order) {
@@ -699,7 +595,7 @@ const RealisticBookPreview = ({
   const isFirst = currentStepIndex === 0;
   const isLast = currentStepIndex === totalSteps - 1;
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (isLast || isFlipping) return;
     const nextIdx = currentStepIndex + 1;
     const curr = steps[currentStepIndex];
@@ -741,9 +637,9 @@ const RealisticBookPreview = ({
       setIsFlipping(false);
       setTransitionData(null);
     }, 650);
-  };
+  }, [currentStepIndex, isFlipping, isLast, onStepChange, steps]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (isFirst || isFlipping) return;
     const prevIdx = currentStepIndex - 1;
     const curr = steps[currentStepIndex];
@@ -785,7 +681,7 @@ const RealisticBookPreview = ({
       setIsFlipping(false);
       setTransitionData(null);
     }, 650);
-  };
+  }, [currentStepIndex, isFlipping, isFirst, onStepChange, steps]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -796,14 +692,14 @@ const RealisticBookPreview = ({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  });
+  }, [handleNext, handlePrev, onClose]);
 
-  const aspectRatio = sizeInfo?.aspectRatio || 707 / 1000;
-  const isCover = currentStep.type === "cover_front" || currentStep.type === "cover_back";
+  const singlePageRatio = sizeInfo?.singlePageRatio || 0.707;
+  const spreadRatio = sizeInfo?.spreadRatio || +(singlePageRatio * 2).toFixed(4);
 
   return (
     <div className="flex flex-col select-none relative pb-2">
-      {/* Top Bar with Book Title, Dimensions, and Close */}
+      {/* Top Bar with Book Title, Dimensions, Mode Toggle, and Download */}
       <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-700">
@@ -820,6 +716,30 @@ const RealisticBookPreview = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Dark / Light Studio Toggle */}
+          <button
+            type="button"
+            onClick={() => setPreviewTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer select-none shadow-2xs ${
+              isDark
+                ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+                : "bg-white hover:bg-slate-50 text-slate-800 border-slate-200"
+            }`}
+            title={`Switch to ${isDark ? "Light" : "Dark"} Studio Background`}
+          >
+            {isDark ? (
+              <>
+                <MdOutlineLightMode className="text-sm text-amber-400" />
+                <span>Light</span>
+              </>
+            ) : (
+              <>
+                <MdOutlineDarkMode className="text-sm text-slate-600" />
+                <span>Dark</span>
+              </>
+            )}
+          </button>
+
           {order && (
             <Button
               size="small"
@@ -832,15 +752,17 @@ const RealisticBookPreview = ({
               Download Book (ZIP)
             </Button>
           )}
+
           {sizeInfo?.dimensions && (
             <Tag color="cyan" className="font-semibold px-2.5 py-0.5 text-xs m-0 rounded-full">
               Size: {sizeInfo.dimensions}
             </Tag>
           )}
+
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 text-slate-400 hover:text-slate-600 rounded-md transition-colors"
+              className="p-1 text-slate-400 hover:text-slate-600 rounded-md transition-colors cursor-pointer"
               title="Close"
             >
               <MdClose className="text-xl" />
@@ -849,33 +771,49 @@ const RealisticBookPreview = ({
         </div>
       </div>
 
-      {/* Main 3D Book Stage (Dark Studio Stage matching customer side) */}
+      {/* Main 3D Book Stage */}
       <div
-        className="w-full relative flex items-center justify-center min-h-[480px] py-6 my-2 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 rounded-2xl shadow-2xl border border-slate-800 overflow-visible"
+        className={`w-full relative flex items-center justify-center min-h-[460px] py-8 my-2 rounded-2xl shadow-2xl border overflow-hidden transition-colors duration-300 ${
+          isDark
+            ? "bg-gradient-to-b from-[#090d16] via-[#111827] to-[#090d16] border-slate-800"
+            : "bg-gradient-to-b from-[#f8fafc] via-[#e2e8f0] to-[#cbd5e1] border-slate-200"
+        }`}
         style={{
-          perspective: "2600px",
+          perspective: "2400px",
           perspectiveOrigin: "50% 50%",
         }}
       >
-        {/* Soft studio table pattern */}
+        {/* Soft studio table spotlight pattern */}
         <div
-          className="absolute inset-0 opacity-15 pointer-events-none rounded-2xl"
+          className={`absolute inset-0 pointer-events-none transition-opacity ${
+            isDark ? "opacity-15" : "opacity-10"
+          }`}
           style={{
-            backgroundImage: "radial-gradient(#ffffff 1px, transparent 1px)",
+            backgroundImage: isDark
+              ? "radial-gradient(#ffffff 1px, transparent 1px)"
+              : "radial-gradient(#000000 1px, transparent 1px)",
             backgroundSize: "24px 24px",
           }}
         />
 
         {/* Ambient Book Soft Drop Shadow */}
-        <div className="absolute bottom-4 w-[75%] h-8 bg-black/70 blur-xl rounded-full pointer-events-none" />
+        <div
+          className={`absolute bottom-4 w-[78%] h-9 blur-xl rounded-full pointer-events-none transition-colors ${
+            isDark ? "bg-black/90" : "bg-slate-900/35"
+          }`}
+        />
 
         {/* Floating Prev Button */}
         <button
           type="button"
           onClick={handlePrev}
           disabled={isFirst || isFlipping}
-          className={`absolute left-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-xl flex items-center justify-center transition-all ${
-            isFirst ? "opacity-30 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
+          className={`absolute left-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full shadow-xl flex items-center justify-center transition-all ${
+            isDark
+              ? "bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-700"
+              : "bg-white/95 hover:bg-white text-slate-800 border border-slate-200"
+          } ${
+            isFirst ? "opacity-25 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
           }`}
           title="Previous Page (Left Arrow)"
         >
@@ -887,206 +825,180 @@ const RealisticBookPreview = ({
           type="button"
           onClick={handleNext}
           disabled={isLast || isFlipping}
-          className={`absolute right-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow-xl flex items-center justify-center transition-all ${
-            isLast ? "opacity-30 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
+          className={`absolute right-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full shadow-xl flex items-center justify-center transition-all ${
+            isDark
+              ? "bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-700"
+              : "bg-white/95 hover:bg-white text-slate-800 border border-slate-200"
+          } ${
+            isLast ? "opacity-25 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
           }`}
           title="Next Page (Right Arrow)"
         >
           <MdChevronRight className="text-2xl" />
         </button>
 
-        <div
-          className="relative transition-all duration-300 ease-out flex items-center justify-center"
-          style={{
-            height: "460px",
-            width: isCover ? `calc(460px * ${aspectRatio})` : `calc(460px * ${aspectRatio} * 2)`,
-            maxWidth: "100%",
-          }}
-        >
-          {/* Closed Front Cover */}
-          {currentStep.type === "cover_front" && !isFlipping && (
-            <div
-              className="relative w-full h-full rounded-r-md overflow-hidden bg-white"
-              style={{
-                boxShadow:
-                  "8px 12px 28px rgba(0, 0, 0, 0.28), 2px 4px 8px rgba(0, 0, 0, 0.15)",
-                borderLeft: "6px solid #1e293b",
-              }}
-            >
-              {renderCanvas(currentStep.page)}
-              {/* Spine edge lighting overlay */}
-              <div
-                className="absolute inset-y-0 left-0 w-6 pointer-events-none"
-                style={{
-                  background:
-                    "linear-gradient(to right, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)",
-                }}
-              />
+        {/* ── CASE 1: ACTIVE TURNING ANIMATION (3D Flipping Leaf) ── */}
+        {isFlipping && transitionData && (
+          <div
+            className="relative rounded-sm shadow-2xl flex select-none overflow-hidden"
+            style={{
+              width: `min(94%, calc(min(440px, 46vh) * ${spreadRatio}))`,
+              maxWidth: spreadRatio < 1.6 ? "780px" : "900px",
+              aspectRatio: `${spreadRatio}`,
+              maxHeight: "46vh",
+              transformStyle: "preserve-3d",
+              backgroundColor: "#000000",
+            }}
+          >
+            {/* Stationary Left Half */}
+            <div className="flex-1 h-full relative overflow-hidden bg-white">
+              {transitionData.stationaryLeft?.is_blank ? (
+                <div className="w-full h-full bg-[#fdfdfd]" />
+              ) : (
+                renderCanvas(transitionData.stationaryLeft)
+              )}
+              {/* Subtle natural binding shadow */}
+              <div className="absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-black/20 to-transparent pointer-events-none z-20" />
             </div>
-          )}
 
-          {/* Closed Back Cover */}
-          {currentStep.type === "cover_back" && !isFlipping && (
-            <div
-              className="relative w-full h-full rounded-l-md overflow-hidden bg-white"
-              style={{
-                boxShadow:
-                  "-8px 12px 28px rgba(0, 0, 0, 0.28), -2px 4px 8px rgba(0, 0, 0, 0.15)",
-                borderRight: "6px solid #1e293b",
-              }}
-            >
-              {renderCanvas(currentStep.page)}
-              {/* Spine edge lighting overlay */}
-              <div
-                className="absolute inset-y-0 right-0 w-6 pointer-events-none"
-                style={{
-                  background:
-                    "linear-gradient(to left, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)",
-                }}
-              />
+            {/* Center Spine Gap (2px dark gutter, no white lines) */}
+            <div className="w-[2px] h-full shrink-0 z-30 bg-[#050811]" />
+
+            {/* Stationary Right Half */}
+            <div className="flex-1 h-full relative overflow-hidden bg-white">
+              {transitionData.stationaryRight?.is_blank ? (
+                <div className="w-full h-full bg-[#fdfdfd]" />
+              ) : (
+                renderCanvas(transitionData.stationaryRight)
+              )}
+              {/* Subtle natural binding shadow */}
+              <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/20 to-transparent pointer-events-none z-20" />
             </div>
-          )}
 
-          {/* Open 2-Page Spread */}
-          {currentStep.type === "spread" && !isFlipping && (
+            {/* 3D Flipping Leaf */}
             <div
-              className="relative w-full h-full flex rounded-md overflow-hidden bg-white"
+              className={`absolute top-0 bottom-0 ${
+                flipDirection === "next"
+                  ? "left-1/2 w-1/2 origin-left book-leaf-turning-next"
+                  : "left-0 w-1/2 origin-right book-leaf-turning-prev"
+              }`}
               style={{
-                boxShadow:
-                  "0 20px 40px -10px rgba(0,0,0,0.28), 0 0 15px rgba(0,0,0,0.08)",
-              }}
-            >
-              {/* Left Page */}
-              <div className="relative flex-1 h-full overflow-hidden border-r border-slate-200">
-                {currentStep.leftPage?.is_blank ? (
-                  <div className="w-full h-full bg-[#fdfdfd] flex items-center justify-center text-slate-300 text-xs italic">
-                    {currentStep.leftPage.label || "Blank Page"}
-                  </div>
-                ) : (
-                  renderCanvas(currentStep.leftPage)
-                )}
-                {/* Left Page Gutter Shadow */}
-                <div
-                  className="absolute inset-y-0 right-0 w-10 pointer-events-none"
-                  style={{
-                    background:
-                      "linear-gradient(to right, transparent, rgba(0,0,0,0.14))",
-                  }}
-                />
-              </div>
-
-              {/* Center Crease / Spine Highlight */}
-              <div
-                className="w-1.5 h-full z-20 shrink-0 pointer-events-none"
-                style={{
-                  background:
-                    "linear-gradient(to right, rgba(0,0,0,0.25), rgba(255,255,255,0.4) 50%, rgba(0,0,0,0.25))",
-                }}
-              />
-
-              {/* Right Page */}
-              <div className="relative flex-1 h-full overflow-hidden border-l border-slate-200">
-                {currentStep.rightPage?.is_blank ? (
-                  <div className="w-full h-full bg-[#fdfdfd] flex items-center justify-center text-slate-300 text-xs italic">
-                    {currentStep.rightPage.label || "Blank Page"}
-                  </div>
-                ) : (
-                  renderCanvas(currentStep.rightPage)
-                )}
-                {/* Right Page Gutter Shadow */}
-                <div
-                  className="absolute inset-y-0 left-0 w-10 pointer-events-none"
-                  style={{
-                    background:
-                      "linear-gradient(to left, transparent, rgba(0,0,0,0.14))",
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* 3D Page Turn Transition Animation */}
-          {isFlipping && transitionData && (
-            <div
-              className="relative w-full h-full flex rounded-md overflow-visible"
-              style={{
-                boxShadow:
-                  "0 20px 40px -10px rgba(0,0,0,0.28), 0 0 15px rgba(0,0,0,0.08)",
                 transformStyle: "preserve-3d",
+                zIndex: 60,
               }}
             >
-              {/* Stationary Left Half */}
-              <div className="relative flex-1 h-full overflow-hidden bg-white border-r border-slate-200">
-                {transitionData.stationaryLeft?.is_blank ? (
-                  <div className="w-full h-full bg-[#fdfdfd]" />
-                ) : (
-                  renderCanvas(transitionData.stationaryLeft)
-                )}
-                <div
-                  className="absolute inset-y-0 right-0 w-10 pointer-events-none"
-                  style={{
-                    background:
-                      "linear-gradient(to right, transparent, rgba(0,0,0,0.14))",
-                  }}
-                />
-              </div>
-
-              {/* Stationary Right Half */}
-              <div className="relative flex-1 h-full overflow-hidden bg-white border-l border-slate-200">
-                {transitionData.stationaryRight?.is_blank ? (
-                  <div className="w-full h-full bg-[#fdfdfd]" />
-                ) : (
-                  renderCanvas(transitionData.stationaryRight)
-                )}
-                <div
-                  className="absolute inset-y-0 left-0 w-10 pointer-events-none"
-                  style={{
-                    background:
-                      "linear-gradient(to left, transparent, rgba(0,0,0,0.14))",
-                  }}
-                />
-              </div>
-
-              {/* Turning 3D Leaf */}
+              {/* Front of leaf */}
               <div
-                className="absolute inset-y-0 z-30"
+                className="absolute inset-0 overflow-hidden bg-white"
                 style={{
-                  width: "50%",
-                  left: flipDirection === "next" ? "50%" : "0%",
-                  transformOrigin: flipDirection === "next" ? "left center" : "right center",
-                  transformStyle: "preserve-3d",
-                  animation:
-                    flipDirection === "next"
-                      ? "bookFlipNext3D 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards"
-                      : "bookFlipPrev3D 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards",
+                  backfaceVisibility: "hidden",
+                  WebkitBackfaceVisibility: "hidden",
                 }}
               >
-                {/* Front of leaf */}
-                <div
-                  className="absolute inset-0 overflow-hidden bg-white"
-                  style={{
-                    backfaceVisibility: "hidden",
-                    WebkitBackfaceVisibility: "hidden",
-                  }}
-                >
-                  {renderCanvas(transitionData.leafFront)}
-                </div>
+                {renderCanvas(transitionData.leafFront)}
+              </div>
 
-                {/* Back of leaf */}
-                <div
-                  className="absolute inset-0 overflow-hidden bg-white"
-                  style={{
-                    backfaceVisibility: "hidden",
-                    WebkitBackfaceVisibility: "hidden",
-                    transform: "rotateY(180deg)",
-                  }}
-                >
-                  {renderCanvas(transitionData.leafBack)}
-                </div>
+              {/* Back of leaf */}
+              <div
+                className="absolute inset-0 overflow-hidden bg-white"
+                style={{
+                  backfaceVisibility: "hidden",
+                  WebkitBackfaceVisibility: "hidden",
+                  transform: "rotateY(180deg)",
+                }}
+              >
+                {renderCanvas(transitionData.leafBack)}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* ── CASE 2: STATIC FRONT COVER (Single Closed Book) ── */}
+        {!isFlipping && currentStep.type === "cover_front" && (
+          <div
+            className="relative rounded-r-lg overflow-hidden transition-transform duration-300 shadow-2xl"
+            style={{
+              aspectRatio: `${singlePageRatio}`,
+              width: `min(85%, calc(min(400px, 46vh) * ${singlePageRatio}))`,
+              maxHeight: "46vh",
+              boxShadow:
+                "-12px 0 24px -4px rgba(0,0,0,0.7), 16px 20px 40px rgba(0,0,0,0.5)",
+            }}
+          >
+            {/* Hardcover Spine Ridge on Left */}
+            <div className="absolute top-0 bottom-0 left-0 w-5 bg-gradient-to-r from-black/40 via-black/10 to-transparent pointer-events-none z-30" />
+            <div className="w-full h-full relative">
+              {renderCanvas(currentStep.page)}
+            </div>
+          </div>
+        )}
+
+        {/* ── CASE 3: STATIC SPREAD (Clean Realistic Layout - Exact Size Aspect Ratio) ── */}
+        {!isFlipping && currentStep.type === "spread" && (
+          <div
+            className="relative rounded-sm overflow-hidden flex transition-all duration-300 select-none shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_20px_rgba(0,0,0,0.5)]"
+            style={{
+              width: `min(94%, calc(min(440px, 46vh) * ${spreadRatio}))`,
+              maxWidth: spreadRatio < 1.6 ? "780px" : "900px",
+              aspectRatio: `${spreadRatio}`,
+              maxHeight: "46vh",
+              backgroundColor: isDark ? "#050811" : "#0f172a",
+            }}
+          >
+            {/* Left Page Half */}
+            <div className="flex-1 h-full relative overflow-hidden bg-white">
+              {currentStep.leftPage?.is_blank ? (
+                <div className="w-full h-full bg-[#fdfdfd] flex flex-col items-center justify-center text-slate-300 select-none">
+                  <span className="text-xs uppercase tracking-widest font-serif opacity-40">
+                    Inside Cover
+                  </span>
+                </div>
+              ) : (
+                renderCanvas(currentStep.leftPage)
+              )}
+              {/* Natural soft binding shadow on right edge of Left Page */}
+              <div className="absolute inset-y-0 right-0 w-3 bg-gradient-to-l from-black/20 to-transparent pointer-events-none z-20" />
+            </div>
+
+            {/* Clean Center Spine Gap / Crease Divider - No White Lines */}
+            <div className={`w-[2px] h-full shrink-0 z-30 ${isDark ? "bg-[#050811]" : "bg-[#94a3b8]"}`} />
+
+            {/* Right Page Half */}
+            <div className="flex-1 h-full relative overflow-hidden bg-white">
+              {currentStep.rightPage?.is_blank ? (
+                <div className="w-full h-full bg-[#fdfdfd] flex flex-col items-center justify-center text-slate-300 select-none">
+                  <span className="text-xs uppercase tracking-widest font-serif opacity-40">
+                    Inside Back Cover
+                  </span>
+                </div>
+              ) : (
+                renderCanvas(currentStep.rightPage)
+              )}
+              {/* Natural soft binding shadow on left edge of Right Page */}
+              <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/20 to-transparent pointer-events-none z-20" />
+            </div>
+          </div>
+        )}
+
+        {/* ── CASE 4: STATIC BACK COVER (Single Closed Book) ── */}
+        {!isFlipping && currentStep.type === "cover_back" && (
+          <div
+            className="relative rounded-l-lg overflow-hidden transition-transform duration-300 shadow-2xl"
+            style={{
+              aspectRatio: `${singlePageRatio}`,
+              width: `min(85%, calc(min(400px, 46vh) * ${singlePageRatio}))`,
+              maxHeight: "46vh",
+              boxShadow:
+                "12px 0 24px -4px rgba(0,0,0,0.7), -16px 20px 40px rgba(0,0,0,0.5)",
+            }}
+          >
+            {/* Hardcover Spine Ridge on Right */}
+            <div className="absolute top-0 bottom-0 right-0 w-5 bg-gradient-to-l from-black/40 via-black/10 to-transparent pointer-events-none z-30" />
+            <div className="w-full h-full relative">
+              {renderCanvas(currentStep.page)}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Navigation Toolbar */}
@@ -1097,7 +1009,7 @@ const RealisticBookPreview = ({
           className={`flex items-center gap-1 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-150 ${
             isFirst || isFlipping
               ? "opacity-30 cursor-not-allowed text-slate-400 bg-slate-50"
-              : "text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:scale-95 shadow-xs"
+              : "text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:scale-95 shadow-xs cursor-pointer"
           }`}
         >
           <MdChevronLeft className="text-lg" />
@@ -1119,7 +1031,7 @@ const RealisticBookPreview = ({
           className={`flex items-center gap-1 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-150 ${
             isLast || isFlipping
               ? "opacity-30 cursor-not-allowed text-slate-400 bg-slate-50"
-              : "text-white bg-teal-600 hover:bg-teal-700 active:scale-95 shadow-sm"
+              : "text-white bg-teal-600 hover:bg-teal-700 active:scale-95 shadow-sm cursor-pointer"
           }`}
         >
           <span>Next</span>
@@ -1135,6 +1047,12 @@ const RealisticBookPreview = ({
         @keyframes bookFlipPrev3D {
           0% { transform: rotateY(0deg); }
           100% { transform: rotateY(180deg); }
+        }
+        .book-leaf-turning-next {
+          animation: bookFlipNext3D 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+        .book-leaf-turning-prev {
+          animation: bookFlipPrev3D 0.65s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
         }
       `}</style>
     </div>
@@ -1166,7 +1084,7 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
     // 2. Check for embedded design pages first
     const embeddedPages = item.photobook_design_data?.pages || order?.photobook_design_data?.pages;
     if (embeddedPages && embeddedPages.length > 0) {
-      setDesignData(item.photobook_design_data || order.photobook_design_data);
+      setDesignData(item.photobook_design_data || order?.photobook_design_data);
     }
 
     // 3. Fetch canonical photobook design from backend
@@ -1176,7 +1094,16 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
         const res = await getPhotoBookDesign(designId);
         const fullDesign = res?.data?.data;
         if (fullDesign && fullDesign.pages?.length > 0) {
-          setDesignData(fullDesign);
+          // If embedded pages have customized photos/elements, merge them with fullDesign
+          if (embeddedPages && embeddedPages.length > 0) {
+            setDesignData({
+              ...fullDesign,
+              ...item.photobook_design_data,
+              pages: embeddedPages,
+            });
+          } else {
+            setDesignData(fullDesign);
+          }
 
           if (fullDesign.template_id) {
             try {
@@ -1218,14 +1145,18 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
     loadDesign();
   }, [open, orderItem, order]);
 
-  // Derive size parameters
+  // Derive size parameters using the unified buildSizeInfo helper
   const sizeInfo = useMemo(() => {
     const item = orderItem || (Array.isArray(order?.cart_items) ? order.cart_items[0] : order?.cart_items) || {};
     const rawSize =
+      item.photobook_size_name ||
+      item.photobook_size ||
+      item.photobook_variants?.Size ||
       item.photobook_details?.size_name ||
       item.photobook_details?.size ||
-      item.photobook_size ||
       designData?.size ||
+      designData?.size_name ||
+      templateData?.page_config?.selected_size ||
       "8x8";
 
     const configSizes = [
@@ -1234,21 +1165,15 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
       ...(templateData?.page_config?.sizes || []),
     ];
 
-    const formatted = formatBookSizeInches(rawSize, configSizes);
-    const isLandscape = formatted.toLowerCase().includes("landscape");
-    const isSquare = formatted.toLowerCase().includes("square") || formatted.includes("8x8") || formatted.includes("12x12");
-
-    return {
-      dimensions: formatted,
-      name: formatted,
-      aspectRatio: isLandscape ? 1000 / 707 : isSquare ? 1 : 707 / 1000,
-    };
+    const resolved = buildSizeInfo(rawSize, 0, configSizes);
+    return resolved;
   }, [orderItem, order, designData, templateData]);
 
   // Construct sequential flip preview steps (Step 0: Front Cover -> Spreads -> Step N: Back Cover)
   const previewSteps = useMemo(() => {
     const item = orderItem || (Array.isArray(order?.cart_items) ? order.cart_items[0] : order?.cart_items) || {};
-    const pages = designData?.pages || item.photobook_design_data?.pages || [];
+    const orderPages = item.photobook_design_data?.pages || order?.photobook_design_data?.pages;
+    const pages = (orderPages && orderPages.length > 0) ? orderPages : (designData?.pages || []);
     if (!pages || pages.length === 0) return [];
 
     const steps = [];
@@ -1394,7 +1319,7 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
       onCancel={onClose}
       footer={null}
       centered
-      width={980}
+      width={1020}
       destroyOnClose
       styles={{
         body: { padding: "16px 20px" },
@@ -1437,4 +1362,3 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
 };
 
 export default PhotoBookOrderPreviewModal;
-

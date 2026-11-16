@@ -58,6 +58,8 @@ import {
   resolveTemplateSizes,
   PRESET_STUDIO_SIZES,
   getCanvasDimensionsForSize,
+  normalizeSizeKey,
+  resolveTemplatePagesForSize,
 } from "../utils/sizeUtils";
 import { calculateDynamicTextDimensions, normalizeElementToPaperCoords, getElementCoords } from "../utils/textUtils";
 
@@ -147,6 +149,46 @@ export const normalizeTemplateForSave = (templateData) => {
     };
   });
 
+  // Maintain independent size_designs dictionary
+  const currentSizeKey = normalizeSizeKey(currentSize);
+  const rawSizeDesigns = templateData.size_designs || {};
+  const normalizedSizeDesigns = { ...rawSizeDesigns };
+
+  normalizedSizeDesigns[currentSizeKey] = {
+    ...(rawSizeDesigns[currentSizeKey] || {}),
+    size_id: currentSizeKey,
+    pages: normalizedPages,
+    page_count: normalizedPages.length,
+    aspect_ratio: aspectRatio,
+    page_width: refWidth,
+    page_height: refHeight,
+  };
+
+  // Ensure all existing size designs have normalized coordinates
+  Object.keys(normalizedSizeDesigns).forEach((k) => {
+    if (k !== currentSizeKey) {
+      const sDes = normalizedSizeDesigns[k];
+      if (sDes && Array.isArray(sDes.pages)) {
+        const sRef = getDimensionsForSize(sDes.size_id || k, sDes.aspect_ratio || "1:1");
+        sDes.pages = sDes.pages.map((p) => ({
+          ...p,
+          page_width: sRef.width,
+          page_height: sRef.height,
+          elements: (p.elements || []).map((el) => {
+            const norm = normalizeElementToPaperCoords(el);
+            return {
+              ...norm,
+              x: Math.round((norm.x_pct / 100) * sRef.width),
+              y: Math.round((norm.y_pct / 100) * sRef.height),
+              width: Math.round((norm.width_pct / 100) * sRef.width),
+              height: Math.round((norm.height_pct / 100) * sRef.height),
+            };
+          }),
+        }));
+      }
+    }
+  });
+
   return {
     ...templateData,
     page_config: {
@@ -157,6 +199,7 @@ export const normalizeTemplateForSave = (templateData) => {
       page_height: refHeight,
     },
     pages: normalizedPages,
+    size_designs: normalizedSizeDesigns,
   };
 };
 
@@ -312,22 +355,82 @@ const PhotoBookEditor = () => {
           String(s.name).toLowerCase() === String(val).toLowerCase()
       ) || buildSizeInfo(val, 0, productData?.photobook_config?.sizes || []);
 
-    setTemplate((prev) => ({
-      ...prev,
-      page_config: {
-        ...prev.page_config,
-        selected_size: sizeObj.id,
-        aspect_ratio: `${sizeObj.singlePageRatio}`,
-        page_width: sizeObj.width,
-        page_height: sizeObj.height,
-        width_in: sizeObj.width_in,
-        height_in: sizeObj.height_in,
-        width_cm: sizeObj.width_cm,
-        height_cm: sizeObj.height_cm,
-        orientation: sizeObj.orientation,
-        dimensions: sizeObj.dimensions,
-      },
-    }));
+    const prevSizeKey = normalizeSizeKey(currentSize);
+    const newSizeKey = normalizeSizeKey(sizeObj.id || val);
+
+    setTemplate((prev) => {
+      const currentPages = prev.pages || [];
+      const updatedSizeDesigns = {
+        ...(prev.size_designs || {}),
+        [prevSizeKey]: {
+          size_id: prevSizeKey,
+          size_name: currentSizeInfo.name || prevSizeKey,
+          dimensions: currentSizeInfo.dimensions || "",
+          aspect_ratio: `${currentSizeInfo.singlePageRatio || "1:1"}`,
+          page_width: currentSizeInfo.width || 0,
+          page_height: currentSizeInfo.height || 0,
+          orientation: currentSizeInfo.orientation || "SQUARE",
+          page_count: currentPages.length,
+          pages: JSON.parse(JSON.stringify(currentPages)),
+        },
+      };
+
+      // Check if newSize already has an independent design
+      let targetPages = [];
+      const matchedKey = Object.keys(updatedSizeDesigns).find(
+        (k) =>
+          k.toLowerCase() === newSizeKey.toLowerCase() ||
+          k.toLowerCase().replace(/\s+/g, "") === newSizeKey.toLowerCase().replace(/\s+/g, "")
+      );
+      const existingNewDesign = matchedKey ? updatedSizeDesigns[matchedKey] : null;
+
+      if (
+        existingNewDesign &&
+        Array.isArray(existingNewDesign.pages) &&
+        existingNewDesign.pages.length > 0
+      ) {
+        targetPages = JSON.parse(JSON.stringify(existingNewDesign.pages));
+        message.info(`Switched to independent design for ${sizeObj.name || newSizeKey}`);
+      } else {
+        // Start from current layout as a baseline for the new size
+        targetPages = JSON.parse(JSON.stringify(currentPages));
+        updatedSizeDesigns[newSizeKey] = {
+          size_id: newSizeKey,
+          size_name: sizeObj.name || newSizeKey,
+          dimensions: sizeObj.dimensions || "",
+          aspect_ratio: `${sizeObj.singlePageRatio}`,
+          page_width: sizeObj.width,
+          page_height: sizeObj.height,
+          orientation: sizeObj.orientation,
+          page_count: targetPages.length,
+          pages: JSON.parse(JSON.stringify(targetPages)),
+        };
+        message.success(`Created independent design layout for ${sizeObj.name || newSizeKey}`);
+      }
+
+      setHistory([JSON.parse(JSON.stringify(targetPages))]);
+      setHistoryIndex(0);
+      setActivePageIndex(0);
+
+      return {
+        ...prev,
+        page_config: {
+          ...prev.page_config,
+          selected_size: sizeObj.id,
+          aspect_ratio: `${sizeObj.singlePageRatio}`,
+          page_width: sizeObj.width,
+          page_height: sizeObj.height,
+          width_in: sizeObj.width_in,
+          height_in: sizeObj.height_in,
+          width_cm: sizeObj.width_cm,
+          height_cm: sizeObj.height_cm,
+          orientation: sizeObj.orientation,
+          dimensions: sizeObj.dimensions,
+        },
+        pages: targetPages,
+        size_designs: updatedSizeDesigns,
+      };
+    });
   };
 
   // Fetch Template Data and associated Product Data
@@ -338,6 +441,17 @@ const PhotoBookEditor = () => {
       const rawData = res.data?.data;
       if (rawData) {
         const data = normalizeTemplateForSave(rawData);
+        const selSize = data.page_config?.selected_size || "8x8";
+        const selSizeKey = normalizeSizeKey(selSize);
+        const sDesigns = data.size_designs || {};
+        const matchedKey = Object.keys(sDesigns).find(
+          (k) =>
+            k.toLowerCase() === selSizeKey ||
+            k.toLowerCase().replace(/\s+/g, "") === selSizeKey.replace(/\s+/g, "")
+        );
+        if (matchedKey && Array.isArray(sDesigns[matchedKey]?.pages) && sDesigns[matchedKey].pages.length > 0) {
+          data.pages = JSON.parse(JSON.stringify(sDesigns[matchedKey].pages));
+        }
         setTemplate(data);
         setHistory([JSON.parse(JSON.stringify(data.pages || []))]);
         setHistoryIndex(0);
@@ -1427,6 +1541,7 @@ const PhotoBookEditor = () => {
         selectedSize={currentSize}
         onSelectSize={handleSizeChange}
         templateSizes={templateSizes}
+        sizeDesigns={template?.size_designs || {}}
       />
 
       {/* ==================== CHANGE / UNSELECT TEMPLATE CONFIGURATION MODAL ==================== */}

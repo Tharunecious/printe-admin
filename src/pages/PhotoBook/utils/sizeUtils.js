@@ -352,3 +352,99 @@ export const getCanvasDimensionsForSize = (selectedSize, configSizes = []) => {
     sizeInfo,
   };
 };
+
+/**
+ * Normalizes size string or object to a canonical identifier key
+ * (e.g. "8x8", "10x10", "12x12", "A4", "A5")
+ */
+export const normalizeSizeKey = (size) => {
+  if (!size) return "default";
+  if (typeof size === "object") {
+    if (size.id) return String(size.id).trim();
+    if (size.name) return String(size.name).trim();
+  }
+  return String(size).trim();
+};
+
+/**
+ * Resolves the independent size-specific pages array for a given template and size.
+ * Returns { pages, isSizeSpecific, matchedSizeKey, sizeConfig }
+ * Fully backward-compatible with legacy single-page templates.
+ */
+export const resolveTemplatePagesForSize = (template, size) => {
+  if (!template) return { pages: [], isSizeSpecific: false, matchedSizeKey: null };
+
+  const targetStr = String(
+    typeof size === "object" && size !== null
+      ? size.id || size.name || ""
+      : size || ""
+  ).trim().toLowerCase();
+
+  const sizeDesigns =
+    template.size_designs ||
+    template.published_snapshot?.size_designs ||
+    {};
+
+  const entries = Object.entries(sizeDesigns);
+  if (entries.length > 0) {
+    const targetDimMatch = targetStr.match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
+    const targetDim = targetDimMatch
+      ? `${parseFloat(targetDimMatch[1])}x${parseFloat(targetDimMatch[2])}`
+      : (typeof size === "object" && size?.width_in && size?.height_in)
+      ? `${parseFloat(size.width_in)}x${parseFloat(size.height_in)}`
+      : null;
+
+    for (const [key, design] of entries) {
+      if (!design || !Array.isArray(design.pages) || design.pages.length === 0) continue;
+      const keyLower = key.toLowerCase();
+      const designIdLower = String(design.size_id || "").toLowerCase();
+      const designNameLower = String(design.size_name || "").toLowerCase();
+
+      // 1. Direct key, size_id, or size_name match
+      if (
+        keyLower === targetStr ||
+        keyLower.replace(/\s+/g, "") === targetStr.replace(/\s+/g, "") ||
+        (designIdLower && designIdLower === targetStr) ||
+        (designNameLower && designNameLower === targetStr)
+      ) {
+        return {
+          pages: design.pages,
+          isSizeSpecific: true,
+          matchedSizeKey: key,
+          sizeConfig: design,
+        };
+      }
+
+      // 2. Check dimension match
+      if (targetDim) {
+        const dimStr = [
+          design.dimensions || "",
+          design.size_name || "",
+          key,
+          design.page_width && design.page_height ? `${design.page_width}x${design.page_height}` : "",
+        ].join(" ");
+        const dMatch = dimStr.match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
+        if (dMatch && `${parseFloat(dMatch[1])}x${parseFloat(dMatch[2])}` === targetDim) {
+          return {
+            pages: design.pages,
+            isSizeSpecific: true,
+            matchedSizeKey: key,
+            sizeConfig: design,
+          };
+        }
+      }
+    }
+  }
+
+  // 3. Fallback to template root pages (legacy or base design)
+  const fallbackPages =
+    template.pages && template.pages.length > 0
+      ? template.pages
+      : template.published_snapshot?.pages || [];
+
+  return {
+    pages: fallbackPages,
+    isSizeSpecific: false,
+    matchedSizeKey: null,
+  };
+};

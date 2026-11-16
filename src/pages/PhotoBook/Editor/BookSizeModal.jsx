@@ -10,6 +10,7 @@ const BookSizeModal = ({
   onSelectSize,
   templateSizes = [],
   supportedSizes = [],
+  sizeDesigns = {},
 }) => {
   // Only show sizes created and configured for this template — identical to customer side
   const resolvedSizes = React.useMemo(() => {
@@ -62,8 +63,8 @@ const BookSizeModal = ({
       <div className="py-2 flex flex-col gap-4 select-none">
         <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
           <span>
-            Selecting a size adjusts the canvas aspect ratio and dimensions to match the paper format.
-            All elements are stored as relative percentages and adapt automatically.
+            Each book size has its own independent template layout, page count, and elements.
+            Switching sizes allows you to create or edit the dedicated design for that specific size.
           </span>
           <Tag color="teal" className="font-mono">
             {resolvedSizes.length} Formats
@@ -134,6 +135,25 @@ const BookSizeModal = ({
                 <span className="text-[10px] font-semibold text-slate-700 mt-1.5 bg-slate-100 px-2 py-0.5 rounded leading-tight border border-slate-200">
                   {s.dimensions}
                 </span>
+
+                {/* Independent Design Status Tag */}
+                {(() => {
+                  const sizeKey = s.id ? String(s.id).toLowerCase().trim() : "";
+                  const hasCustomDesign = Object.keys(sizeDesigns || {}).some(
+                    (k) =>
+                      k.toLowerCase() === sizeKey ||
+                      k.toLowerCase().replace(/\s+/g, "") === sizeKey.replace(/\s+/g, "")
+                  );
+                  return hasCustomDesign ? (
+                    <Tag color="cyan" className="text-[9px] mt-1.5 font-semibold m-0">
+                      CUSTOM DESIGN
+                    </Tag>
+                  ) : (
+                    <Tag color="default" className="text-[9px] mt-1.5 font-semibold text-slate-500 m-0">
+                      NEW LAYOUT
+                    </Tag>
+                  );
+                })()}
 
                 {/* Explicit Width & Height Breakdown */}
                 <div className="flex flex-col text-[9px] text-slate-500 font-medium mt-1.5 leading-tight gap-0.5">
