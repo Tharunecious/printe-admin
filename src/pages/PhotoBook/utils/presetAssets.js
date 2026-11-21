@@ -44,13 +44,48 @@ export const PRESET_FONTS = [
 
 export const AVAILABLE_FONTS = PRESET_FONTS;
 
+export const dynamicallyLoadGoogleFont = (fontFamily) => {
+  if (!fontFamily || typeof document === "undefined") return;
+  const cleanName = String(fontFamily).replace(/['"]/g, "").trim();
+  if (!cleanName || cleanName.toLowerCase() === "inherit" || cleanName.toLowerCase() === "initial") return;
+
+  const systemFonts = [
+    "arial", "helvetica", "times new roman", "times", "courier new", 
+    "courier", "georgia", "verdana", "tahoma", "trebuchet ms", 
+    "impact", "comic sans ms", "sans-serif", "serif", "monospace", "cursive"
+  ];
+  if (systemFonts.includes(cleanName.toLowerCase())) return;
+
+  const fontId = `gfont-${cleanName.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
+  if (document.getElementById(fontId)) return;
+
+  try {
+    const link = document.createElement("link");
+    link.id = fontId;
+    link.rel = "stylesheet";
+    const encodedName = cleanName.replace(/\s+/g, "+");
+    link.href = `https://fonts.googleapis.com/css2?family=${encodedName}:ital,wght@0,300..900;1,300..900&display=swap`;
+    document.head.appendChild(link);
+  } catch (e) {
+    // ignore
+  }
+};
+
 export const getFontFamilyFallback = (fontName) => {
   if (!fontName) return "'Inter', sans-serif";
   const clean = String(fontName).replace(/['"]/g, "").trim();
-  const sansFonts = ["Inter", "Jost", "Roboto", "Montserrat", "Arial"];
-  const scriptFonts = ["Caveat", "Dancing Script", "Great Vibes"];
-  if (scriptFonts.includes(clean)) return `'${clean}', cursive`;
-  if (sansFonts.includes(clean)) return `'${clean}', sans-serif`;
+  const sansFonts = [
+    "Inter", "Jost", "Roboto", "Montserrat", "Arial", "Open Sans", 
+    "Lato", "Poppins", "Nunito", "Rubik", "Outfit", "Work Sans", 
+    "Plus Jakarta Sans", "DM Sans", "Manrope", "Barlow"
+  ];
+  const scriptFonts = [
+    "Caveat", "Dancing Script", "Great Vibes", "Pacifico", "Alex Brush", 
+    "Sacramento", "Satisfy", "Courgette", "Allura", "Parisienne", 
+    "Yesteryear", "Kaushan Script", "Marck Script", "Tangerine"
+  ];
+  if (scriptFonts.some((f) => f.toLowerCase() === clean.toLowerCase())) return `'${clean}', cursive`;
+  if (sansFonts.some((f) => f.toLowerCase() === clean.toLowerCase())) return `'${clean}', sans-serif`;
   return `'${clean}', serif`;
 };
 

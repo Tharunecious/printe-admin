@@ -67,8 +67,24 @@ const Canvas = ({
   // Background styling
   const getBackgroundStyle = () => {
     const bg = page?.background || {};
+    const flipH = Boolean(bg.flip_h || bg.flipH);
+    const flipV = Boolean(bg.flip_v || bg.flipV);
+    const transform =
+      flipH && flipV
+        ? "scale(-1, -1)"
+        : flipH
+          ? "scaleX(-1)"
+          : flipV
+            ? "scaleY(-1)"
+            : undefined;
+
     if (bg.type === "gradient") {
-      return { background: bg.value, opacity: bg.opacity ?? 1 };
+      return {
+        background: bg.value,
+        opacity: bg.opacity ?? 1,
+        transform,
+        transformOrigin: transform ? "center center" : undefined,
+      };
     }
     const isImage =
       bg.type === "image" ||
@@ -84,17 +100,24 @@ const Canvas = ({
         fitMode === "stretch" || fitMode === "100% 100%"
           ? "100% 100%"
           : fitMode === "contain"
-          ? (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "contain")
-          : (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "cover");
+            ? (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "contain")
+            : (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "cover");
       return {
         backgroundImage: `url("${bg.value}")`,
         backgroundSize: size,
         backgroundPosition: `${posX} ${posY}`,
         backgroundRepeat: "no-repeat",
         opacity: bg.opacity ?? 1,
+        transform,
+        transformOrigin: transform ? "center center" : undefined,
       };
     }
-    return { backgroundColor: bg.value || "#ffffff", opacity: bg.opacity ?? 1 };
+    return {
+      backgroundColor: bg.value || "#ffffff",
+      opacity: bg.opacity ?? 1,
+      transform,
+      transformOrigin: transform ? "center center" : undefined,
+    };
   };
 
   // Helper to compute pixel rectangle for current canvas dimensions
@@ -216,9 +239,9 @@ const Canvas = ({
           is_percentage: true,
           ...(el?.type === "text"
             ? {
-                width_pct: Number(((rect.width / canvasWidth) * 100).toFixed(2)),
-                height_pct: Number(((rect.height / canvasHeight) * 100).toFixed(2)),
-              }
+              width_pct: Number(((rect.width / canvasWidth) * 100).toFixed(2)),
+              height_pct: Number(((rect.height / canvasHeight) * 100).toFixed(2)),
+            }
             : {}),
         });
       } else if (activeTransform.type === "resize") {
@@ -425,11 +448,10 @@ const Canvas = ({
             {/* Subtle Photobook Spine Shade (For interior pages) */}
             {page?.page_type === "interior" && (
               <div
-                className={`absolute top-0 bottom-0 w-8 pointer-events-none z-10 ${
-                  (page?.page_number || 1) % 2 === 0
-                    ? "right-0 bg-gradient-to-l from-black/10 to-transparent"
-                    : "left-0 bg-gradient-to-r from-black/10 to-transparent"
-                }`}
+                className={`absolute top-0 bottom-0 w-8 pointer-events-none z-10 ${(page?.page_number || 1) % 2 === 0
+                  ? "right-0 bg-gradient-to-l from-black/10 to-transparent"
+                  : "left-0 bg-gradient-to-r from-black/10 to-transparent"
+                  }`}
               />
             )}
 
@@ -444,7 +466,7 @@ const Canvas = ({
               .sort((a, b) => (a.z_index || 1) - (b.z_index || 1))
               .map((el) => (
                 <ElementRenderer
-                  key={`${el.id}_${el.content || ''}_${el.font_family || ''}_${el.font_size || ''}_${el.font_style || ''}_${el.font_weight || ''}_${el.color || ''}_${el.align || ''}`}
+                  key={`${el.id}_${el.content || ''}_${el.font_family || ''}_${el.font_size || ''}_${el.font_style || ''}_${el.font_weight || ''}_${el.color || ''}_${el.align || ''}_${el.text_transform || el.textTransform || ''}`}
                   element={el}
                   isSelected={el.id === selectedElementId}
                   onSelect={onSelectElement}
@@ -485,9 +507,12 @@ const Canvas = ({
                 {/* Cyan Selection Border */}
                 <div className="absolute inset-0 border-2 border-cyan-400 pointer-events-none shadow-sm" />
 
-                {/* Floating Quick Action Mini Toolbar */}
+                {/* Floating Quick Action Mini Toolbar (Cleanly positioned on top of the top border) */}
                 <div
-                  className="absolute -top-13 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/95 text-white border border-slate-700/80 px-2 py-1.5 rounded-xl shadow-2xl backdrop-blur-md pointer-events-auto z-[10000] text-xs whitespace-nowrap"
+                  className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 bg-slate-900/95 text-white border border-slate-700/80 px-2 py-1.5 rounded-xl shadow-2xl backdrop-blur-md pointer-events-auto z-[10000] text-xs whitespace-nowrap"
+                  style={{
+                    bottom: "calc(100% + 14px)",
+                  }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -556,36 +581,36 @@ const Canvas = ({
                   </button>
                 </div>
 
-              {/* 8 Resizing Handles (Hidden if locked) */}
-              {!selectedElement.is_locked &&
-                RESIZE_HANDLES.map((handle) => (
-                  <div
-                    key={handle.position}
-                    onMouseDown={(e) => handleResizeMouseDown(e, handle)}
-                    className="absolute w-3 h-3 bg-white border-2 border-teal-600 rounded-sm pointer-events-auto hover:scale-125 transition-transform"
-                    style={{
-                      left: `${handle.xPct * 100}%`,
-                      top: `${handle.yPct * 100}%`,
-                      transform: "translate(-50%, -50%)",
-                      cursor: handle.cursor,
-                    }}
-                  />
-                ))}
+                {/* 8 Resizing Handles (Hidden if locked) */}
+                {!selectedElement.is_locked &&
+                  RESIZE_HANDLES.map((handle) => (
+                    <div
+                      key={handle.position}
+                      onMouseDown={(e) => handleResizeMouseDown(e, handle)}
+                      className="absolute w-3 h-3 bg-white border-2 border-teal-600 rounded-sm pointer-events-auto hover:scale-125 transition-transform"
+                      style={{
+                        left: `${handle.xPct * 100}%`,
+                        top: `${handle.yPct * 100}%`,
+                        transform: "translate(-50%, -50%)",
+                        cursor: handle.cursor,
+                      }}
+                    />
+                  ))}
 
-              {/* Rotation Handle with connecting line */}
-              {!selectedElement.is_locked && (
-                <>
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-6 w-0.5 h-6 bg-teal-500" />
-                  <div
-                    onMouseDown={handleRotateMouseDown}
-                    className="absolute -top-8 left-1/2 -translate-x-1/2 w-5 h-5 bg-white border-2 border-teal-600 rounded-full shadow pointer-events-auto flex items-center justify-center hover:scale-110 cursor-grab active:cursor-grabbing transition-transform text-teal-700"
-                    title="Rotate element"
-                  >
-                    <FiRotateCw size={10} />
-                  </div>
-                </>
-              )}
-            </div>
+                {/* Rotation Handle with connecting line (Cleanly hanging below the bottom border) */}
+                {!selectedElement.is_locked && (
+                  <>
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0.5 h-4 bg-teal-500 pointer-events-none" />
+                    <div
+                      onMouseDown={handleRotateMouseDown}
+                      className="absolute top-[calc(100%+14px)] left-1/2 -translate-x-1/2 w-6 h-6 bg-white border-2 border-teal-600 rounded-full shadow pointer-events-auto flex items-center justify-center hover:scale-110 cursor-grab active:cursor-grabbing transition-transform text-teal-700"
+                      title="Rotate element"
+                    >
+                      <FiRotateCw size={11} />
+                    </div>
+                  </>
+                )}
+              </div>
             );
           })()}
         </div>

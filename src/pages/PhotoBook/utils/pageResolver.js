@@ -38,6 +38,20 @@ export const resolveInteriorPage = (interiorPageNumber, pages = []) => {
     };
   }
 
+  // Priority 1.5: Direct sequential match from designed filmstrip cards
+  // If the designer created an interior card at this exact sequential position (P1 -> Page 1, P2 -> Page 2...),
+  // prioritize it so the preview matches the filmstrip card sequence.
+  const directIndexPage = interiorPages[interiorPageNumber - 1];
+  if (directIndexPage) {
+    return {
+      resolvedPage: directIndexPage,
+      priority: 1.5,
+      ruleType: directIndexPage.targeting_rule?.rule_type || "interior_sequence",
+      hasConflict: false,
+      candidates: [directIndexPage],
+    };
+  }
+
   // Priority 2: Odd/Even interior rule
   const oddEvenCandidates = interiorPages.filter(
     (p) =>
@@ -106,6 +120,9 @@ export const resolveInteriorPage = (interiorPageNumber, pages = []) => {
 export const resolveCompleteBook = (template, totalInteriorPages = 20) => {
   const pages = template?.pages || [];
   const { frontCover, backCover } = resolveCoverPages(pages);
+  const interiorPages = pages.filter((p) => p.page_type === "interior");
+  const masterInteriorPage = interiorPages[0] || pages[0];
+  const masterElements = masterInteriorPage?.elements || [];
 
   const bookPages = [];
 
@@ -122,15 +139,23 @@ export const resolveCompleteBook = (template, totalInteriorPages = 20) => {
   }
 
   // 2. Interior Pages (1 to totalInteriorPages)
+  // Elements stay at the same point (from master interior layout), only background changes sequentially
   for (let i = 1; i <= totalInteriorPages; i++) {
-    const resolution = resolveInteriorPage(i, pages);
+    const seqIdx = (i - 1) % (interiorPages.length || 1);
+    const bgPage = interiorPages[seqIdx] || masterInteriorPage;
     bookPages.push({
       type: "interior",
       interiorNumber: i,
       displayPageNumber: `Page ${i}`,
-      label: `Page ${i} (${resolution.ruleType.replace("_", " ")})`,
-      page: resolution.resolvedPage,
-      resolution,
+      label: `Page ${i}`,
+      page: {
+        ...bgPage,
+        page_id: `resolved_page_${i}`,
+        page_number: i,
+        elements: masterElements,
+        background: bgPage?.background,
+      },
+      resolution: { priority: 1, ruleType: "interior_sequence" },
     });
   }
 

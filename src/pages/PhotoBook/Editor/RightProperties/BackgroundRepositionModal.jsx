@@ -13,6 +13,7 @@ import {
   MdVisibilityOff,
   MdLayers,
 } from "react-icons/md";
+import { LuFlipHorizontal, LuFlipVertical } from "react-icons/lu";
 import ElementRenderer from "../ElementRenderer";
 
 const POSITION_PRESETS = [
@@ -40,6 +41,8 @@ const BackgroundRepositionModal = ({
   const [posY, setPosY] = useState(50);
   const [scale, setScale] = useState(1);
   const [fitMode, setFitMode] = useState("cover"); // "cover" | "contain" | "stretch"
+  const [flipH, setFlipH] = useState(false);
+  const [flipV, setFlipV] = useState(false);
   const [showElements, setShowElements] = useState(true);
   const [showBleedGuides, setShowBleedGuides] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -53,6 +56,8 @@ const BackgroundRepositionModal = ({
       setScale(bg.scale !== undefined ? Number(bg.scale) : 1);
       const rawFit = bg.fit_mode || "cover";
       setFitMode(rawFit === "100% 100%" ? "stretch" : rawFit);
+      setFlipH(Boolean(bg.flip_h || bg.flipH));
+      setFlipV(Boolean(bg.flip_v || bg.flipV));
     }
   }, [open, bg]);
 
@@ -99,6 +104,8 @@ const BackgroundRepositionModal = ({
       position_y: posY,
       scale: fitMode === "stretch" ? 1 : scale,
       fit_mode: fitMode === "stretch" ? "100% 100%" : fitMode,
+      flip_h: flipH,
+      flip_v: flipV,
     });
     onClose();
   };
@@ -108,6 +115,8 @@ const BackgroundRepositionModal = ({
     setPosY(50);
     setScale(1);
     setFitMode("cover");
+    setFlipH(false);
+    setFlipV(false);
   };
 
   // Compute CSS aspect ratio from singlePageRatio or string
@@ -193,13 +202,41 @@ const BackgroundRepositionModal = ({
               ? "Contain Mode: Entire image fits inside the page. Drag or use 9-point grid to align."
               : "Cover Mode: Image covers entire page. Drag on page to choose focal visible area."}
           </span>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="text-xs text-slate-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer transition-colors"
-          >
-            <MdRefresh className="text-sm" /> Reset
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFlipH((prev) => !prev)}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                flipH
+                  ? "bg-teal-600 text-white border-teal-600 shadow-xs ring-1 ring-teal-400"
+                  : "bg-white text-slate-700 border-slate-300 hover:border-teal-400 hover:bg-teal-50"
+              }`}
+              title="Flip Background Horizontally"
+            >
+              <LuFlipHorizontal className="text-sm" />
+              <span>Flip H</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFlipV((prev) => !prev)}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                flipV
+                  ? "bg-teal-600 text-white border-teal-600 shadow-xs ring-1 ring-teal-400"
+                  : "bg-white text-slate-700 border-slate-300 hover:border-teal-400 hover:bg-teal-50"
+              }`}
+              title="Flip Background Vertically"
+            >
+              <LuFlipVertical className="text-sm" />
+              <span>Flip V</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-xs text-slate-500 hover:text-teal-600 flex items-center gap-1 font-semibold cursor-pointer transition-colors ml-1"
+            >
+              <MdRefresh className="text-sm" /> Reset
+            </button>
+          </div>
         </div>
 
         {/* ── Realistic Photobook Stage Simulation ─────────────────────── */}
@@ -244,6 +281,15 @@ const BackgroundRepositionModal = ({
                 backgroundRepeat: "no-repeat",
                 backgroundColor: bg.background_color || "#ffffff",
                 opacity: bg.opacity ?? 1,
+                transform:
+                  flipH && flipV
+                    ? "scale(-1, -1)"
+                    : flipH
+                      ? "scaleX(-1)"
+                      : flipV
+                        ? "scaleY(-1)"
+                        : undefined,
+                transformOrigin: "center center",
               }}
             />
 
@@ -320,6 +366,8 @@ const BackgroundRepositionModal = ({
               {fitMode !== "stretch" && (
                 <span>• Focus: {posX}% X, {posY}% Y {scale > 1 ? `• Zoom: ${Math.round(scale * 100)}%` : ""}</span>
               )}
+              {flipH && <span className="text-amber-300 font-bold">• Flipped H</span>}
+              {flipV && <span className="text-amber-300 font-bold">• Flipped V</span>}
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Modal, Select, Tag, Switch } from "antd";
 import { resolveCompleteBook } from "./utils/pageResolver";
 import ElementRenderer from "./Editor/ElementRenderer";
-import { buildSizeInfo, resolveTemplateSizes } from "./utils/sizeUtils";
+import { buildSizeInfo, resolveTemplateSizes, resolveTemplatePagesForSize } from "./utils/sizeUtils";
 import {
   MdChevronLeft,
   MdChevronRight,
@@ -105,9 +105,6 @@ const BOOK_ANIMATION_STYLES = `
 `;
 
 const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
-  const [totalInteriorPages, setTotalInteriorPages] = useState(
-    template?.page_config?.default_pages || 20
-  );
   const [includeBlank, setIncludeBlank] = useState(() =>
     Boolean(template?.include_blank_page || template?.page_config?.include_blank_page)
   );
@@ -151,24 +148,30 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
     return matched || buildSizeInfo(selectedSizeId || "A4", 0, configSizes);
   }, [selectedSizeId, availableSizes, configSizes]);
 
-  // Resolve sequential book items
-  const resolvedBookPages = useMemo(() => {
-    if (!template) return [];
-    return resolveCompleteBook(template, totalInteriorPages);
-  }, [template, totalInteriorPages]);
-
-  // Build authentic 2-page photobook spreads reflecting blank page toggle
+  // Build authentic 2-page photobook spreads directly from user's created cards
   const steps = useMemo(() => {
-    if (!resolvedBookPages.length) return [];
-    const frontCover = resolvedBookPages.find(
-      (p) => p.page?.page_type === "front_cover" || (p.type === "cover" && p.coverType === "front_cover")
-    );
-    const backCover = resolvedBookPages.find(
-      (p) => p.page?.page_type === "back_cover" || (p.type === "cover" && p.coverType === "back_cover")
-    );
-    const interiorPages = resolvedBookPages.filter(
-      (p) => p.page?.page_type === "interior" || p.type === "interior"
-    );
+    let templatePages = template?.pages || [];
+    if (sizeInfo) {
+      const res = resolveTemplatePagesForSize(template, sizeInfo);
+      if (res && res.isSizeSpecific && Array.isArray(res.pages) && res.pages.length > 0) {
+        templatePages = res.pages;
+      }
+    }
+    if (!templatePages.length) return [];
+
+    const frontCover = templatePages.find((p) => p.page_type === "front_cover") || templatePages[0];
+    const backCover = templatePages.find((p) => p.page_type === "back_cover") || templatePages[templatePages.length - 1];
+
+    const rawInteriorPages = templatePages.filter((p) => p.page_type === "interior");
+
+    // In photobook sequence: each card in sequence renders its own exact elements and background
+    const interiorPages = rawInteriorPages.map((p, idx) => ({
+      type: "interior",
+      interiorNumber: idx + 1,
+      displayPageNumber: `Page ${idx + 1}`,
+      label: p.name || `Page ${idx + 1}`,
+      page: p,
+    }));
 
     const list = [];
 
@@ -176,19 +179,24 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
     list.push({
       type: "cover_front",
       title: "Front Cover",
-      page: frontCover?.page,
+      page: frontCover,
       label: "Front Cover",
       displayPageNumber: "Cover",
     });
 
     if (includeBlank) {
-      // MODE A: Blank Page Enabled (Inside Covers are Blank)
-      // Spread 1: Inside Front Cover (left, blank) + Interior Page 1 (right)
+      // BLANK PAGE ON:
+      // Inside Front Cover (left, blank) + Page 1 (right)
+      const page1 = interiorPages[0];
       list.push({
         type: "spread",
         title: "Inside Cover (Blank) & Page 1",
-        leftPage: { is_blank: true, label: "Inside Front Cover (Blank)", page: null },
-        rightPage: interiorPages[0] || { is_blank: true, label: "Page 1", page: null },
+        leftPage: {
+          is_blank: true,
+          label: "Inside Front Cover (Blank)",
+          page: null,
+        },
+        rightPage: page1 || { is_blank: true, label: "Page 1", page: null },
         spreadNumber: 1,
       });
 
@@ -201,16 +209,22 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
         list.push({
           type: "spread",
           title: right
-            ? `Pages ${left.interiorNumber || idx + 1} & ${right.interiorNumber || idx + 2}`
-            : `Page ${left.interiorNumber || idx + 1} & Inside Back Cover (Blank)`,
+            ? `Pages ${left.interiorNumber} & ${right.interiorNumber}`
+            : `Page ${left.interiorNumber} & Inside Back Cover (Blank)`,
           leftPage: left || { is_blank: true, label: "Blank", page: null },
-          rightPage: right || { is_blank: true, label: "Inside Back Cover (Blank)", page: null },
+          rightPage: right || {
+            is_blank: true,
+            label: "Inside Back Cover (Blank)",
+            page: null,
+          },
           spreadNumber: spreadCount++,
         });
         idx += 2;
       }
     } else {
-      // MODE B: Blank Page Disabled (Continuous Pages - No blank inside covers)
+      // BLANK PAGE OFF:
+      // Front cover, Page 1 and Page 2 (Spread 1: Page 1 on left, Page 2 on right),
+      // Page 3 and Page 4 (Spread 2: Page 3 on left, Page 4 on right), etc.
       let idx = 0;
       let spreadCount = 1;
       while (idx < interiorPages.length) {
@@ -219,8 +233,8 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
         list.push({
           type: "spread",
           title: right
-            ? `Pages ${left.interiorNumber || idx + 1} & ${right.interiorNumber || idx + 2}`
-            : `Page ${left.interiorNumber || idx + 1}`,
+            ? `Pages ${left.interiorNumber} & ${right.interiorNumber}`
+            : `Page ${left.interiorNumber}`,
           leftPage: left || { is_blank: true, label: "Blank", page: null },
           rightPage: right || { is_blank: true, label: "Blank", page: null },
           spreadNumber: spreadCount++,
@@ -233,13 +247,13 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
     list.push({
       type: "cover_back",
       title: "Back Cover",
-      page: backCover?.page,
+      page: backCover,
       label: "Back Cover",
       displayPageNumber: "Back",
     });
 
     return list;
-  }, [resolvedBookPages, includeBlank]);
+  }, [template, includeBlank, sizeInfo]);
 
   // Reset to first spread when modal opens or template changes
   useEffect(() => {
@@ -408,9 +422,20 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
         ? (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "contain")
         : (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "cover");
 
+    const flipH = Boolean(bg.flip_h || bg.flipH);
+    const flipV = Boolean(bg.flip_v || bg.flipV);
+    const transform =
+      flipH && flipV
+        ? "scale(-1, -1)"
+        : flipH
+          ? "scaleX(-1)"
+          : flipV
+            ? "scaleY(-1)"
+            : undefined;
+
     const bgStyle =
       bg.type === "gradient"
-        ? { background: bg.value, opacity: bg.opacity ?? 1 }
+        ? { background: bg.value, opacity: bg.opacity ?? 1, transform, transformOrigin: transform ? "center center" : undefined }
         : bg.type === "image" && bg.value
         ? {
             backgroundImage: `url(${bg.value})`,
@@ -419,17 +444,26 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
             backgroundRepeat: "no-repeat",
             backgroundColor: bg.background_color || "#ffffff",
             opacity: bg.opacity ?? 1,
+            transform,
+            transformOrigin: transform ? "center center" : undefined,
           }
-        : { backgroundColor: bg.value || "#ffffff", opacity: bg.opacity ?? 1 };
+        : { backgroundColor: bg.value || "#ffffff", opacity: bg.opacity ?? 1, transform, transformOrigin: transform ? "center center" : undefined };
 
     return (
       <div
         className="w-full h-full relative overflow-hidden select-none bg-white"
         style={{
-          ...bgStyle,
           containerType: "inline-size",
         }}
       >
+        {/* Dedicated Background Layer (Allows flipping background independently of page elements) */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            zIndex: 0,
+            ...bgStyle,
+          }}
+        />
         {/* Render elements relative to page width and height */}
         {(page?.elements || []).map((el) => (
           <ElementRenderer
@@ -440,11 +474,11 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
         ))}
 
         {/* Page Number indicator if interior */}
-        {pageItem.displayPageNumber && !isCover && (
+        {pageItem?.displayPageNumber && !isCover && (
           <div
             className={`absolute bottom-2.5 ${
               isLeft ? "left-3.5" : "right-3.5"
-            } text-[10px] text-slate-400 font-mono pointer-events-none z-30 opacity-75 bg-white/70 px-1.5 py-0.5 rounded shadow-2xs`}
+            } text-[10px] text-slate-600 font-mono pointer-events-none z-30 bg-white/85 border border-slate-300 px-1.5 py-0.5 rounded shadow-xs`}
           >
             {pageItem.displayPageNumber}
           </div>
@@ -525,22 +559,8 @@ const BookPreviewModal = ({ open, onClose, template, configSizes = [] }) => {
             </div>
 
             <div className="flex items-center gap-1.5 text-xs text-slate-300 bg-slate-700/50 px-2.5 py-1 rounded-lg border border-slate-600/50">
-              <span className="text-slate-400">Length:</span>
-              <Select
-                size="small"
-                value={totalInteriorPages}
-                onChange={(val) => {
-                  setTotalInteriorPages(val);
-                  setCurrentStepIndex(0);
-                }}
-                className="w-24"
-                options={[
-                  { value: 10, label: "10 Pages" },
-                  { value: 20, label: "20 Pages" },
-                  { value: 30, label: "30 Pages" },
-                  { value: 40, label: "40 Pages" },
-                ]}
-              />
+              <span className="text-slate-400 font-medium">Pages:</span>
+              <span className="text-teal-300 font-semibold">{steps.length > 0 ? `${(template?.pages || []).length} Cards (${steps.length} Steps)` : "0"}</span>
             </div>
 
             <button

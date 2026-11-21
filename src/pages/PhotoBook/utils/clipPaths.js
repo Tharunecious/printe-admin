@@ -16,6 +16,7 @@ export const FRAME_SHAPES = [
 export const getShapeClipPathDefinition = (shape, cornerRadiusPercent = 0) => {
   switch (shape) {
     case "circle":
+    case "round":
       return {
         type: "ellipse",
         attrs: { cx: "0.5", cy: "0.5", rx: "0.5", ry: "0.5" },
@@ -25,7 +26,7 @@ export const getShapeClipPathDefinition = (shape, cornerRadiusPercent = 0) => {
       return {
         type: "path",
         attrs: {
-          d: "M 0.5,0.88 C 0.08,0.58 0,0.38 0,0.25 C 0,0.1 0.12,0 0.27,0 C 0.38,0 0.46,0.06 0.5,0.16 C 0.54,0.06 0.62,0 0.73,0 C 0.88,0 1,0.1 1,0.25 C 1,0.38 0.92,0.58 0.5,0.88 Z",
+          d: "M 0.5,1 C 0.08,0.66 0,0.43 0,0.28 C 0,0.11 0.12,0 0.27,0 C 0.38,0 0.46,0.07 0.5,0.18 C 0.54,0.07 0.62,0 0.73,0 C 0.88,0 1,0.11 1,0.28 C 1,0.43 0.92,0.66 0.5,1 Z",
         },
       };
 
@@ -34,7 +35,7 @@ export const getShapeClipPathDefinition = (shape, cornerRadiusPercent = 0) => {
         type: "polygon",
         attrs: {
           points:
-            "0.5,0.02 0.63,0.36 0.98,0.38 0.71,0.61 0.79,0.96 0.5,0.77 0.21,0.96 0.29,0.61 0.02,0.38 0.37,0.36",
+            "0.5,0 0.63,0.36 1,0.38 0.72,0.63 0.81,1 0.5,0.79 0.19,1 0.28,0.63 0,0.38 0.37,0.36",
         },
       };
 
@@ -42,7 +43,7 @@ export const getShapeClipPathDefinition = (shape, cornerRadiusPercent = 0) => {
       return {
         type: "polygon",
         attrs: {
-          points: "0.5,0.02 0.95,0.26 0.95,0.74 0.5,0.98 0.05,0.74 0.05,0.26",
+          points: "0.5,0 1,0.25 1,0.75 0.5,1 0,0.75 0,0.25",
         },
       };
 
@@ -77,3 +78,74 @@ export const getShapeClipPathDefinition = (shape, cornerRadiusPercent = 0) => {
       };
   }
 };
+
+/**
+ * 0..100 Coordinate Space definitions for SVG viewBox="0 0 100 100"
+ * Guarantees uniform SVG masking and stroke border across arbitrary shapes
+ */
+export const getShape100Definition = (shape, cornerRadiusPercent = 0) => {
+  switch (shape) {
+    case "circle":
+    case "round":
+      return {
+        type: "ellipse",
+        attrs: { cx: "50", cy: "50", rx: "50", ry: "50" },
+      };
+
+    case "heart":
+      return {
+        type: "path",
+        attrs: {
+          d: "M 50,100 C 8,66 0,43 0,28 C 0,11 12,0 27,0 C 38,0 46,7 50,18 C 54,7 62,0 73,0 C 88,0 100,11 100,28 C 100,43 92,66 50,100 Z",
+        },
+      };
+
+    case "star":
+      return {
+        type: "polygon",
+        attrs: {
+          points: "50,0 63,36 100,38 72,63 81,100 50,79 19,100 28,63 0,38 37,36",
+        },
+      };
+
+    case "hexagon":
+      return {
+        type: "polygon",
+        attrs: {
+          points: "50,0 100,25 100,75 50,100 0,75 0,25",
+        },
+      };
+
+    case "arch":
+      return {
+        type: "path",
+        attrs: {
+          d: "M 0,100 L 0,45 C 0,20 22,0 50,0 C 78,0 100,20 100,45 L 100,100 Z",
+        },
+      };
+
+    case "scallop":
+      return {
+        type: "path",
+        attrs: {
+          d: "M 50,5 C 58,0 68,3 72,10 C 77,8 86,12 88,18 C 94,21 98,30 97,37 C 101,43 100,52 96,57 C 100,63 98,72 92,77 C 92,84 86,91 79,92 C 76,98 68,100 61,98 C 56,102 46,102 41,98 C 34,100 26,98 23,92 C 16,91 10,84 10,77 C 4,72 2,63 6,57 C 2,52 1,43 5,37 C 4,30 8,21 14,18 C 16,12 25,8 30,10 C 34,3 44,0 50,5 Z",
+        },
+      };
+
+    case "rectangle":
+    default:
+      return {
+        type: "rect",
+        attrs: {
+          x: "0",
+          y: "0",
+          width: "100",
+          height: "100",
+          rx: cornerRadiusPercent > 0 ? cornerRadiusPercent : 0,
+          ry: cornerRadiusPercent > 0 ? cornerRadiusPercent : 0,
+        },
+      };
+  }
+};
+
+

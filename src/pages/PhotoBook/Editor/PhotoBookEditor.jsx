@@ -60,6 +60,7 @@ import {
   getCanvasDimensionsForSize,
   normalizeSizeKey,
   resolveTemplatePagesForSize,
+  getCleanSizeName,
 } from "../utils/sizeUtils";
 import { calculateDynamicTextDimensions, normalizeElementToPaperCoords, getElementCoords } from "../utils/textUtils";
 
@@ -138,13 +139,30 @@ export const normalizeTemplateForSave = (templateData) => {
       position_y: bg.position_y !== undefined ? Number(bg.position_y) : 50,
       scale: bg.scale !== undefined ? Number(bg.scale) : 1,
       fit_mode: bg.fit_mode || "cover",
+      flip_h: Boolean(bg.flip_h || bg.flipH),
+      flip_v: Boolean(bg.flip_v || bg.flipV),
     };
+
+    let normalizedRule = p.targeting_rule ? { ...p.targeting_rule } : {};
+    if (p.page_type === "front_cover") {
+      normalizedRule = { rule_type: "front_cover" };
+    } else if (p.page_type === "back_cover") {
+      normalizedRule = { rule_type: "back_cover" };
+    } else if (p.page_type === "interior") {
+      if (!normalizedRule.rule_type || normalizedRule.rule_type === "all_interior" || normalizedRule.rule_type === "all_pages") {
+        normalizedRule.rule_type = "exact_page";
+      }
+      if (normalizedRule.rule_type === "exact_page") {
+        normalizedRule.page_number = Math.max(1, Number(normalizedRule.page_number) || 1);
+      }
+    }
 
     return {
       ...p,
       page_width: refWidth,
       page_height: refHeight,
       background: normalizedBackground,
+      targeting_rule: normalizedRule,
       elements,
     };
   });
@@ -153,16 +171,43 @@ export const normalizeTemplateForSave = (templateData) => {
   const currentSizeKey = normalizeSizeKey(currentSize);
   const rawSizeDesigns = templateData.size_designs || {};
   const normalizedSizeDesigns = { ...rawSizeDesigns };
+  const currentSizeName = templateData.page_config?.size_name || currentSize;
+  const cleanName = getCleanSizeName(currentSizeName);
+  const currentOrientation = templateData.page_config?.orientation || (refWidth > refHeight ? "HORIZONTAL" : refWidth < refHeight ? "VERTICAL" : "SQUARE");
 
-  normalizedSizeDesigns[currentSizeKey] = {
+  const currentDesignObj = {
     ...(rawSizeDesigns[currentSizeKey] || {}),
     size_id: currentSizeKey,
-    pages: normalizedPages,
-    page_count: normalizedPages.length,
+    size_name: currentSizeName,
+    dimensions: templateData.page_config?.dimensions || "",
     aspect_ratio: aspectRatio,
+    orientation: currentOrientation,
     page_width: refWidth,
     page_height: refHeight,
+    page_count: normalizedPages.length,
+    pages: normalizedPages,
   };
+
+  normalizedSizeDesigns[currentSizeKey] = currentDesignObj;
+
+  if (currentSizeName) {
+    const nameKey = normalizeSizeKey(currentSizeName);
+    if (nameKey !== currentSizeKey) {
+      normalizedSizeDesigns[nameKey] = currentDesignObj;
+    }
+  }
+  if (cleanName && cleanName !== currentSizeKey) {
+    normalizedSizeDesigns[cleanName] = currentDesignObj;
+  }
+  if (currentOrientation === "HORIZONTAL") {
+    normalizedSizeDesigns["landscape"] = currentDesignObj;
+    normalizedSizeDesigns["horizontal"] = currentDesignObj;
+  } else if (currentOrientation === "VERTICAL") {
+    normalizedSizeDesigns["portrait"] = currentDesignObj;
+    normalizedSizeDesigns["vertical"] = currentDesignObj;
+  } else if (currentOrientation === "SQUARE") {
+    normalizedSizeDesigns["square"] = currentDesignObj;
+  }
 
   // Ensure all existing size designs have normalized coordinates
   Object.keys(normalizedSizeDesigns).forEach((k) => {
@@ -355,46 +400,69 @@ const PhotoBookEditor = () => {
           String(s.name).toLowerCase() === String(val).toLowerCase()
       ) || buildSizeInfo(val, 0, productData?.photobook_config?.sizes || []);
 
-    const prevSizeKey = normalizeSizeKey(currentSize);
+    const prevSizeKey = normalizeSizeKey(currentSizeInfo.id || currentSize);
     const newSizeKey = normalizeSizeKey(sizeObj.id || val);
+    const prevSizeName = currentSizeInfo.name || prevSizeKey;
+    const prevCleanName = getCleanSizeName(prevSizeName);
+    const prevOrientation = currentSizeInfo.orientation || (currentSizeInfo.singlePageRatio > 1.05 ? "HORIZONTAL" : currentSizeInfo.singlePageRatio < 0.95 ? "VERTICAL" : "SQUARE");
 
     setTemplate((prev) => {
       const currentPages = prev.pages || [];
       const updatedSizeDesigns = {
         ...(prev.size_designs || {}),
-        [prevSizeKey]: {
-          size_id: prevSizeKey,
-          size_name: currentSizeInfo.name || prevSizeKey,
-          dimensions: currentSizeInfo.dimensions || "",
-          aspect_ratio: `${currentSizeInfo.singlePageRatio || "1:1"}`,
-          page_width: currentSizeInfo.width || 0,
-          page_height: currentSizeInfo.height || 0,
-          orientation: currentSizeInfo.orientation || "SQUARE",
-          page_count: currentPages.length,
-          pages: JSON.parse(JSON.stringify(currentPages)),
-        },
       };
 
-      // Check if newSize already has an independent design
-      let targetPages = [];
-      const matchedKey = Object.keys(updatedSizeDesigns).find(
-        (k) =>
-          k.toLowerCase() === newSizeKey.toLowerCase() ||
-          k.toLowerCase().replace(/\s+/g, "") === newSizeKey.toLowerCase().replace(/\s+/g, "")
-      );
-      const existingNewDesign = matchedKey ? updatedSizeDesigns[matchedKey] : null;
+      const savedPrevDesign = {
+        size_id: prevSizeKey,
+        size_name: prevSizeName,
+        dimensions: currentSizeInfo.dimensions || "",
+        aspect_ratio: `${currentSizeInfo.singlePageRatio || "1:1"}`,
+        page_width: currentSizeInfo.width || 0,
+        page_height: currentSizeInfo.height || 0,
+        orientation: prevOrientation,
+        page_count: currentPages.length,
+        pages: JSON.parse(JSON.stringify(currentPages)),
+      };
 
+      updatedSizeDesigns[prevSizeKey] = savedPrevDesign;
+      if (prevSizeName && normalizeSizeKey(prevSizeName) !== prevSizeKey) {
+        updatedSizeDesigns[normalizeSizeKey(prevSizeName)] = savedPrevDesign;
+      }
+      if (prevCleanName && prevCleanName !== prevSizeKey) {
+        updatedSizeDesigns[prevCleanName] = savedPrevDesign;
+      }
+      if (prevOrientation === "HORIZONTAL") {
+        updatedSizeDesigns["landscape"] = savedPrevDesign;
+        updatedSizeDesigns["horizontal"] = savedPrevDesign;
+      } else if (prevOrientation === "VERTICAL") {
+        updatedSizeDesigns["portrait"] = savedPrevDesign;
+        updatedSizeDesigns["vertical"] = savedPrevDesign;
+      } else if (prevOrientation === "SQUARE") {
+        updatedSizeDesigns["square"] = savedPrevDesign;
+      }
+
+      // Check if newSize already has an independent design using intelligent matcher
+      const resolved = resolveTemplatePagesForSize(
+        { size_designs: updatedSizeDesigns, pages: prev.pages },
+        sizeObj
+      );
+
+      let targetPages = [];
       if (
-        existingNewDesign &&
-        Array.isArray(existingNewDesign.pages) &&
-        existingNewDesign.pages.length > 0
+        resolved &&
+        resolved.isSizeSpecific &&
+        Array.isArray(resolved.pages) &&
+        resolved.pages.length > 0
       ) {
-        targetPages = JSON.parse(JSON.stringify(existingNewDesign.pages));
-        message.info(`Switched to independent design for ${sizeObj.name || newSizeKey}`);
+        targetPages = JSON.parse(JSON.stringify(resolved.pages));
+        message.info(`Switched to perspective design for ${sizeObj.name || newSizeKey}`);
       } else {
-        // Start from current layout as a baseline for the new size
-        targetPages = JSON.parse(JSON.stringify(currentPages));
-        updatedSizeDesigns[newSizeKey] = {
+        // Initialize clean independent layout for this size - do NOT copy elements from another size
+        targetPages = currentPages.map((p) => ({
+          ...p,
+          elements: [],
+        }));
+        const newRecord = {
           size_id: newSizeKey,
           size_name: sizeObj.name || newSizeKey,
           dimensions: sizeObj.dimensions || "",
@@ -405,6 +473,16 @@ const PhotoBookEditor = () => {
           page_count: targetPages.length,
           pages: JSON.parse(JSON.stringify(targetPages)),
         };
+        updatedSizeDesigns[newSizeKey] = newRecord;
+        const newClean = getCleanSizeName(sizeObj.name);
+        if (newClean) updatedSizeDesigns[newClean] = newRecord;
+        if (sizeObj.orientation === "HORIZONTAL") {
+          updatedSizeDesigns["landscape"] = newRecord;
+          updatedSizeDesigns["horizontal"] = newRecord;
+        } else if (sizeObj.orientation === "VERTICAL") {
+          updatedSizeDesigns["portrait"] = newRecord;
+          updatedSizeDesigns["vertical"] = newRecord;
+        }
         message.success(`Created independent design layout for ${sizeObj.name || newSizeKey}`);
       }
 
@@ -440,37 +518,21 @@ const PhotoBookEditor = () => {
       const res = await getPhotoBookTemplateById(id);
       const rawData = res.data?.data;
       if (rawData) {
-        const data = normalizeTemplateForSave(rawData);
-        const selSize = data.page_config?.selected_size || "8x8";
-        const selSizeKey = normalizeSizeKey(selSize);
-        const sDesigns = data.size_designs || {};
-        const matchedKey = Object.keys(sDesigns).find(
-          (k) =>
-            k.toLowerCase() === selSizeKey ||
-            k.toLowerCase().replace(/\s+/g, "") === selSizeKey.replace(/\s+/g, "")
-        );
-        if (matchedKey && Array.isArray(sDesigns[matchedKey]?.pages) && sDesigns[matchedKey].pages.length > 0) {
-          data.pages = JSON.parse(JSON.stringify(sDesigns[matchedKey].pages));
-        }
-        setTemplate(data);
-        setHistory([JSON.parse(JSON.stringify(data.pages || []))]);
-        setHistoryIndex(0);
-
-        // Fetch eligible products to extract photobook_config.sizes (identical to customer side)
+        let matchedProd = null;
         try {
           const prodRes = await getEligiblePhotoBookProducts();
           const allProds = prodRes.data?.data || [];
-          const matchedProd =
+          matchedProd =
             allProds.find((p) => {
-              if (data.eligible_product_ids?.some((ep) => String(ep._id || ep) === String(p._id))) {
+              if (rawData.eligible_product_ids?.some((ep) => String(ep._id || ep) === String(p._id))) {
                 return true;
               }
               const templates = p.photobook_config?.templates || [];
               return templates.some(
                 (t) =>
-                  String(t.template_name || "").toLowerCase() === String(data.template_name || "").toLowerCase() ||
-                  String(t.template_id || "") === String(data.template_id || "") ||
-                  String(t._id || "") === String(data._id || "")
+                  String(t.template_name || "").toLowerCase() === String(rawData.template_name || "").toLowerCase() ||
+                  String(t.template_id || "") === String(rawData.template_id || "") ||
+                  String(t._id || "") === String(rawData._id || "")
               );
             }) ||
             allProds.find((p) => Array.isArray(p.photobook_config?.sizes) && p.photobook_config.sizes.length > 0) ||
@@ -482,6 +544,113 @@ const PhotoBookEditor = () => {
         } catch (e) {
           console.warn("Could not fetch eligible products:", e);
         }
+
+        const configSizes = matchedProd?.photobook_config?.sizes || [];
+        const tplSizes = resolveTemplateSizes({
+          template: rawData,
+          product: matchedProd,
+          configSizes,
+        });
+
+        // Resolve active size obj: prioritize page_config.selected_size, then first product size
+        const selSize = rawData.page_config?.selected_size;
+        let activeSizeObj = null;
+        if (selSize) {
+          activeSizeObj = tplSizes.find(
+            (s) =>
+              String(s.id).toLowerCase() === String(selSize).toLowerCase() ||
+              String(s.name).toLowerCase() === String(selSize).toLowerCase()
+          );
+        }
+        if (!activeSizeObj && tplSizes.length > 0) {
+          activeSizeObj = tplSizes[0];
+        }
+        if (!activeSizeObj) {
+          activeSizeObj = buildSizeInfo(selSize || "A4", 0, configSizes);
+        }
+
+        const resolved = resolveTemplatePagesForSize(rawData, activeSizeObj);
+        let activePages = [];
+        if (resolved && resolved.isSizeSpecific && Array.isArray(resolved.pages) && resolved.pages.length > 0) {
+          activePages = JSON.parse(JSON.stringify(resolved.pages));
+        } else if (Array.isArray(rawData.pages) && rawData.pages.length > 0) {
+          activePages = JSON.parse(JSON.stringify(rawData.pages));
+        }
+
+        // Auto-fix legacy +1 offset bug in interior pages (where 1st interior page was set to 2, 2nd to 3, etc.)
+        const interiorList = activePages.filter((p) => p.page_type === "interior");
+        const hasOffsetBug =
+          interiorList.length > 0 &&
+          interiorList[0]?.targeting_rule?.rule_type === "exact_page" &&
+          Number(interiorList[0]?.targeting_rule?.page_number) === 2 &&
+          !interiorList.some((p) => p.targeting_rule?.rule_type === "exact_page" && Number(p.targeting_rule?.page_number) === 1);
+
+        if (hasOffsetBug) {
+          activePages = activePages.map((p) => {
+            if (p.page_type === "interior" && p.targeting_rule?.rule_type === "exact_page") {
+              const num = Number(p.targeting_rule?.page_number);
+              if (num > 1) {
+                return {
+                  ...p,
+                  targeting_rule: {
+                    ...p.targeting_rule,
+                    page_number: num - 1,
+                  },
+                };
+              }
+            }
+            return p;
+          });
+        }
+
+        // Clean up any legacy default names and ensure sequential numbering
+        let interiorCount = 0;
+        activePages = activePages.map((p) => {
+          if (p.page_type === "interior") {
+            interiorCount++;
+            const cleanName = `Page ${interiorCount}`;
+            const isSpecialRule = p.targeting_rule?.rule_type === "odd_interior" || p.targeting_rule?.rule_type === "even_interior";
+            const currentRule = isSpecialRule ? p.targeting_rule.rule_type : "exact_page";
+            return {
+              ...p,
+              name: cleanName,
+              targeting_rule: {
+                rule_type: currentRule,
+                page_number: interiorCount,
+              },
+            };
+          }
+          if (p.page_type === "front_cover") {
+            return { ...p, name: "Front Cover", targeting_rule: { rule_type: "front_cover" } };
+          }
+          if (p.page_type === "back_cover") {
+            return { ...p, name: "Back Cover", targeting_rule: { rule_type: "back_cover" } };
+          }
+          return p;
+        });
+
+        const data = normalizeTemplateForSave({
+          ...rawData,
+          page_config: {
+            ...(rawData.page_config || {}),
+            selected_size: activeSizeObj.id,
+            size_name: activeSizeObj.name,
+            aspect_ratio: `${activeSizeObj.singlePageRatio}`,
+            page_width: activeSizeObj.width,
+            page_height: activeSizeObj.height,
+            width_in: activeSizeObj.width_in,
+            height_in: activeSizeObj.height_in,
+            width_cm: activeSizeObj.width_cm,
+            height_cm: activeSizeObj.height_cm,
+            orientation: activeSizeObj.orientation,
+            dimensions: activeSizeObj.dimensions,
+          },
+          pages: activePages,
+        });
+
+        setTemplate(data);
+        setHistory([JSON.parse(JSON.stringify(data.pages || []))]);
+        setHistoryIndex(0);
       }
     } catch (err) {
       console.error("Error fetching template:", err);
@@ -575,6 +744,41 @@ const PhotoBookEditor = () => {
   const currentElements = currentPage?.elements || [];
   const selectedElement = currentElements.find((el) => el.id === selectedElementId);
 
+  // Universal Size Design Synchronizer
+  const syncPagesToSizeDesigns = (updatedPages, prevDesigns = {}) => {
+    const curKey = normalizeSizeKey(currentSizeInfo.id || currentSize);
+    const curName = currentSizeInfo.name || curKey;
+    const cleanName = getCleanSizeName(curName);
+    const curOrient = currentSizeInfo.orientation || (currentSizeInfo.singlePageRatio > 1.05 ? "HORIZONTAL" : currentSizeInfo.singlePageRatio < 0.95 ? "VERTICAL" : "SQUARE");
+
+    const designObj = {
+      ...(prevDesigns[curKey] || {}),
+      size_id: curKey,
+      size_name: curName,
+      dimensions: currentSizeInfo.dimensions || "",
+      aspect_ratio: `${currentSizeInfo.singlePageRatio || "1:1"}`,
+      page_width: currentSizeInfo.width || 0,
+      page_height: currentSizeInfo.height || 0,
+      orientation: curOrient,
+      page_count: updatedPages.length,
+      pages: updatedPages,
+    };
+
+    const next = { ...prevDesigns, [curKey]: designObj };
+    if (curName && normalizeSizeKey(curName) !== curKey) next[normalizeSizeKey(curName)] = designObj;
+    if (cleanName && cleanName !== curKey) next[cleanName] = designObj;
+    if (curOrient === "HORIZONTAL") {
+      next["landscape"] = designObj;
+      next["horizontal"] = designObj;
+    } else if (curOrient === "VERTICAL") {
+      next["portrait"] = designObj;
+      next["vertical"] = designObj;
+    } else if (curOrient === "SQUARE") {
+      next["square"] = designObj;
+    }
+    return next;
+  };
+
   // Update Page Elements
   const updateCurrentPageElements = (newElements) => {
     setTemplate((prev) => {
@@ -584,7 +788,8 @@ const PhotoBookEditor = () => {
         ...updatedPages[activePageIndex],
         elements: newElements,
       };
-      return { ...prev, pages: updatedPages };
+      const updatedSizeDesigns = syncPagesToSizeDesigns(updatedPages, prev.size_designs || {});
+      return { ...prev, pages: updatedPages, size_designs: updatedSizeDesigns };
     });
     if (template?.pages) {
       const updatedPages = [...template.pages];
@@ -834,8 +1039,9 @@ const PhotoBookEditor = () => {
         ...updatedPages[activePageIndex],
         background: bg,
       };
+      const updatedSizeDesigns = syncPagesToSizeDesigns(updatedPages, prev.size_designs || {});
       pushHistory(updatedPages);
-      return { ...prev, pages: updatedPages };
+      return { ...prev, pages: updatedPages, size_designs: updatedSizeDesigns };
     });
   };
 
@@ -997,8 +1203,36 @@ const PhotoBookEditor = () => {
       const newPages = [...prev.pages];
       const [moved] = newPages.splice(fromIdx, 1);
       newPages.splice(toIdx, 0, moved);
-      pushHistory(newPages);
-      return { ...prev, pages: newPages };
+
+      // Re-align exact_page numbers to match new interior sequence
+      let interiorCounter = 0;
+      const reorderedPages = newPages.map((p) => {
+        if (p.page_type === "interior") {
+          interiorCounter++;
+          const cleanName = !p.name || p.name.toLowerCase().includes("interior")
+            ? `Page ${interiorCounter}`
+            : p.name;
+          if (p.targeting_rule?.rule_type === "exact_page") {
+            return {
+              ...p,
+              name: cleanName,
+              targeting_rule: {
+                ...p.targeting_rule,
+                page_number: interiorCounter,
+              },
+            };
+          }
+          return {
+            ...p,
+            name: cleanName,
+          };
+        }
+        return p;
+      });
+
+      const updatedSizeDesigns = syncPagesToSizeDesigns(reorderedPages, prev.size_designs || {});
+      pushHistory(reorderedPages);
+      return { ...prev, pages: reorderedPages, size_designs: updatedSizeDesigns };
     });
     setActivePageIndex(toIdx);
     message.success("Pages reordered! Book follows rules: Front Cover → Interior Pages → Back Cover");
@@ -1006,40 +1240,31 @@ const PhotoBookEditor = () => {
 
   // Page Operations with Rule Exclusivity
   const handleAddPage = (pageType = "interior") => {
-    const existingRules = (template?.pages || []).map((p) => p.targeting_rule?.rule_type).filter(Boolean);
-    let nextRule = "all_interior";
-    if (!existingRules.includes("odd_interior")) {
-      nextRule = "odd_interior";
-    } else if (!existingRules.includes("even_interior")) {
-      nextRule = "even_interior";
-    } else if (!existingRules.includes("all_interior")) {
-      nextRule = "all_interior";
-    } else {
-      nextRule = "exact_page";
-    }
+    const interiorPages = (template?.pages || []).filter((p) => p.page_type === "interior");
+    const interiorIndex = interiorPages.length + 1;
+    const nextRule = "exact_page";
+    const nextNum = interiorIndex;
 
-    const usedPageNumbers = (template?.pages || [])
-      .filter((p) => p.targeting_rule?.rule_type === "exact_page")
-      .map((p) => p.targeting_rule?.page_number)
-      .filter(Boolean);
-    let nextNum = 1;
-    while (usedPageNumbers.includes(nextNum)) {
-      nextNum++;
-    }
+    // In photobook sequence, layout elements stay at the same point across interior pages
+    const masterInterior = interiorPages[0];
+    const initialElements = (masterInterior?.elements || []).map((el) => ({
+      ...el,
+      id: uuidv4(),
+    }));
 
-    const pageIndex = (template?.pages?.length || 0) + 1;
     const newPage = {
       page_id: uuidv4(),
-      name: `Interior Page ${pageIndex}`,
+      name: `Page ${interiorIndex}`,
       page_type: pageType,
       targeting_rule: { rule_type: nextRule, page_number: nextNum },
       background: { type: "color", value: "#ffffff", opacity: 1 },
-      elements: [],
+      elements: initialElements,
     };
     setTemplate((prev) => {
       const updatedPages = [...prev.pages, newPage];
+      const updatedSizeDesigns = syncPagesToSizeDesigns(updatedPages, prev.size_designs || {});
       pushHistory(updatedPages);
-      return { ...prev, pages: updatedPages };
+      return { ...prev, pages: updatedPages, size_designs: updatedSizeDesigns };
     });
     setActivePageIndex(template.pages.length);
     message.success(`Added page with rule: ${nextRule.replace("_", " ")}`);
@@ -1053,9 +1278,10 @@ const PhotoBookEditor = () => {
     // Duplicate CANNOT duplicate an already-assigned odd/even rule!
     let clonedRule = { ...(source.targeting_rule || { rule_type: "exact_page", page_number: 1 }) };
     if (["odd_interior", "even_interior", "all_interior"].includes(clonedRule.rule_type)) {
-      const usedPageNumbers = (template?.pages || [])
+      const interiorPages = (template?.pages || []).filter((p) => p.page_type === "interior");
+      const usedPageNumbers = interiorPages
         .filter((p) => p.targeting_rule?.rule_type === "exact_page")
-        .map((p) => p.targeting_rule?.page_number)
+        .map((p) => Number(p.targeting_rule?.page_number))
         .filter(Boolean);
       let nextNum = 1;
       while (usedPageNumbers.includes(nextNum)) {
@@ -1078,8 +1304,9 @@ const PhotoBookEditor = () => {
     setTemplate((prev) => {
       const updatedPages = [...prev.pages];
       updatedPages.splice(idx + 1, 0, cloned);
+      const updatedSizeDesigns = syncPagesToSizeDesigns(updatedPages, prev.size_designs || {});
       pushHistory(updatedPages);
-      return { ...prev, pages: updatedPages };
+      return { ...prev, pages: updatedPages, size_designs: updatedSizeDesigns };
     });
     setActivePageIndex(idx + 1);
   };
@@ -1091,8 +1318,9 @@ const PhotoBookEditor = () => {
     }
     setTemplate((prev) => {
       const updatedPages = prev.pages.filter((_, i) => i !== idx);
+      const updatedSizeDesigns = syncPagesToSizeDesigns(updatedPages, prev.size_designs || {});
       pushHistory(updatedPages);
-      return { ...prev, pages: updatedPages };
+      return { ...prev, pages: updatedPages, size_designs: updatedSizeDesigns };
     });
     setActivePageIndex(Math.max(0, idx - 1));
   };
@@ -1101,11 +1329,20 @@ const PhotoBookEditor = () => {
     // Validate uniqueness: odd_interior, even_interior, all_interior cannot be duplicated
     if (["odd_interior", "even_interior", "all_interior"].includes(newRule.rule_type)) {
       const conflict = (template.pages || []).some(
-        (p, i) => i !== idx && p.targeting_rule?.rule_type === newRule.rule_type
+        (p, i) => i !== idx && p.page_type === "interior" && p.targeting_rule?.rule_type === newRule.rule_type
       );
       if (conflict) {
         message.warning(`Rule "${newRule.rule_type.replace('_', ' ')}" is already assigned to another page! Each rule must be unique.`);
         return;
+      }
+    }
+    if (newRule.rule_type === "exact_page" && newRule.page_number) {
+      const targetNum = Number(newRule.page_number);
+      const conflict = (template.pages || []).some(
+        (p, i) => i !== idx && p.page_type === "interior" && p.targeting_rule?.rule_type === "exact_page" && Number(p.targeting_rule?.page_number) === targetNum
+      );
+      if (conflict) {
+        message.warning(`Interior Page ${targetNum} is already assigned to another page.`);
       }
     }
     setTemplate((prev) => {
@@ -1134,7 +1371,7 @@ const PhotoBookEditor = () => {
       message.success("Template draft saved successfully (all elements normalized to paper size)!");
     } catch (err) {
       console.error("Save error:", err);
-      message.error("Failed to save template");
+      message.error(err.response?.data?.message || err.message || "Failed to save template");
     } finally {
       setSaving(false);
     }
@@ -1560,11 +1797,10 @@ const PhotoBookEditor = () => {
 
           {/* Current Status Box */}
           <div
-            className={`p-3.5 rounded-xl border flex items-center justify-between ${
-              template.product_template_id
-                ? "bg-emerald-50 border-emerald-200 text-emerald-950"
-                : "bg-amber-50 border-amber-200 text-amber-950"
-            }`}
+            className={`p-3.5 rounded-xl border flex items-center justify-between ${template.product_template_id
+              ? "bg-emerald-50 border-emerald-200 text-emerald-950"
+              : "bg-amber-50 border-amber-200 text-amber-950"
+              }`}
           >
             <div>
               <span className="text-xs font-bold block">
@@ -1636,13 +1872,12 @@ const PhotoBookEditor = () => {
                   return (
                     <div
                       key={tpl.product_template_id || tpl.slug}
-                      className={`p-3 rounded-lg border flex items-center justify-between transition-colors ${
-                        isCurrent
-                          ? "bg-emerald-50/80 border-emerald-400"
-                          : isAssignedToOther
+                      className={`p-3 rounded-lg border flex items-center justify-between transition-colors ${isCurrent
+                        ? "bg-emerald-50/80 border-emerald-400"
+                        : isAssignedToOther
                           ? "bg-slate-50 border-slate-200 opacity-60"
                           : "bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {tpl.cover_image_url || tpl.thumbnail_url ? (

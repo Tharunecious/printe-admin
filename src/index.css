@@ -157,17 +157,24 @@ body {
   font-weight: 500 !important;
 }
 
-*{
-  text-transform: capitalize ;
-}
-
-input{
+input,
+textarea,
+select,
+.ant-input,
+.ant-input-number-input,
+[data-photobook-font],
+[data-photobook-font] *,
+.photobook-canvas,
+.photobook-canvas *,
+[data-element-id],
+[data-element-id] * {
   text-transform: none !important;
 }
 
 /* PhotoBook Editor Dynamic Font Support */
 [data-photobook-font] {
   font-family: var(--photobook-font) !important;
+  text-transform: none !important;
 }
 [data-photobook-font] * {
   font-family: inherit !important;

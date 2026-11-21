@@ -22,7 +22,11 @@ import {
 import {
   getElementCoords,
   calculateDynamicTextDimensions,
+  parseBorderValues,
+  parsePaddingValues,
 } from "../PhotoBook/utils/textUtils";
+import { getShape100Definition } from "../PhotoBook/utils/clipPaths";
+import { renderShape100 } from "../PhotoBook/Editor/ElementRenderer";
 
 // ── Google Fonts dynamic stylesheet injector ─────────────────────────────────
 const GOOGLE_FONTS_LIST = [
@@ -91,17 +95,17 @@ const getShapeClipPathDefinition = (shape = "rectangle", radiusVal = 0) => {
     case "heart":
       return {
         type: "path",
-        d: "M 0.5,0.88 C 0.08,0.58 0,0.38 0,0.25 C 0,0.1 0.12,0 0.27,0 C 0.38,0 0.46,0.06 0.5,0.16 C 0.54,0.06 0.62,0 0.73,0 C 0.88,0 1,0.1 1,0.25 C 1,0.38 0.92,0.58 0.5,0.88 Z",
+        d: "M 0.5,1 C 0.08,0.66 0,0.43 0,0.28 C 0,0.11 0.12,0 0.27,0 C 0.38,0 0.46,0.07 0.5,0.18 C 0.54,0.07 0.62,0 0.73,0 C 0.88,0 1,0.11 1,0.28 C 1,0.43 0.92,0.66 0.5,1 Z",
       };
     case "star":
       return {
         type: "polygon",
-        points: "0.5,0.02 0.63,0.36 0.98,0.38 0.71,0.61 0.79,0.96 0.5,0.77 0.21,0.96 0.29,0.61 0.02,0.38 0.37,0.36",
+        points: "0.5,0 0.63,0.36 1,0.38 0.72,0.63 0.81,1 0.5,0.79 0.19,1 0.28,0.63 0,0.38 0.37,0.36",
       };
     case "hexagon":
       return {
         type: "polygon",
-        points: "0.5,0.02 0.95,0.26 0.95,0.74 0.5,0.98 0.05,0.74 0.05,0.26",
+        points: "0.5,0 1,0.25 1,0.75 0.5,1 0,0.75 0,0.25",
       };
     case "scallop":
       return {
@@ -150,6 +154,35 @@ const renderShapeSvgClip = (def) => {
   return <rect x="0" y="0" width="1" height="1" />;
 };
 
+const renderShapeSvgBorder = (def, strokeColor, strokeWidthVal) => {
+  if (!def || !strokeWidthVal) return null;
+  const strokeStyle = {
+    strokeWidth: `calc(${strokeWidthVal} * (100cqw / 707))`,
+  };
+  const commonProps = {
+    fill: "none",
+    stroke: strokeColor,
+    vectorEffect: "non-scaling-stroke",
+    style: strokeStyle,
+  };
+  if (def.type === "circle") {
+    return <circle cx={def.cx} cy={def.cy} r={def.r} {...commonProps} />;
+  }
+  if (def.type === "ellipse") {
+    return <ellipse cx={def.cx} cy={def.cy} rx={def.rx} ry={def.ry} {...commonProps} />;
+  }
+  if (def.type === "rect") {
+    return <rect x={def.x} y={def.y} width={def.width} height={def.height} rx={def.rx} ry={def.ry} {...commonProps} />;
+  }
+  if (def.type === "path") {
+    return <path d={def.d} {...commonProps} />;
+  }
+  if (def.type === "polygon") {
+    return <polygon points={def.points} {...commonProps} />;
+  }
+  return null;
+};
+
 // ── Resolve Decoration SVG ────────────────────────────────────────────────────
 const resolveDecorationSvg = (el) => {
   if (el.custom_svg) return el.custom_svg;
@@ -184,12 +217,25 @@ const PhotobookPageCanvas = ({ page }) => {
         bg.value.startsWith("data:image/") ||
         /\.(jpg|jpeg|png|webp|avif|gif|svg)($|\?)/i.test(bg.value)));
 
+  const flipH = Boolean(bg.flip_h || bg.flipH);
+  const flipV = Boolean(bg.flip_v || bg.flipV);
+  const transform =
+    flipH && flipV
+      ? "scale(-1, -1)"
+      : flipH
+        ? "scaleX(-1)"
+        : flipV
+          ? "scaleY(-1)"
+          : undefined;
+
   const bgLayerStyle = {
     position: "absolute",
     inset: 0,
     pointerEvents: "none",
     zIndex: 0,
     opacity: bg.opacity ?? 1,
+    transform,
+    transformOrigin: transform ? "center center" : undefined,
   };
 
   if (bg.type === "gradient") {
@@ -202,12 +248,12 @@ const PhotobookPageCanvas = ({ page }) => {
       fitMode === "stretch" || fitMode === "100% 100%"
         ? "100% 100%"
         : fitMode === "contain"
-        ? bg.scale && bg.scale > 1
-          ? `${Math.round(bg.scale * 100)}%`
-          : "contain"
-        : bg.scale && bg.scale > 1
-        ? `${Math.round(bg.scale * 100)}%`
-        : "cover";
+          ? bg.scale && bg.scale > 1
+            ? `${Math.round(bg.scale * 100)}%`
+            : "contain"
+          : bg.scale && bg.scale > 1
+            ? `${Math.round(bg.scale * 100)}%`
+            : "cover";
     bgLayerStyle.backgroundImage = `url("${bg.value}")`;
     bgLayerStyle.backgroundSize = size;
     bgLayerStyle.backgroundPosition = `${posX} ${posY}`;
@@ -268,8 +314,10 @@ const PhotobookPageCanvas = ({ page }) => {
             "";
           const hasPhoto = Boolean(displayPhoto);
           const fitMode = el.fit_mode || "cover";
-          const borderWidth = el.border?.width || 0;
-          const borderColor = el.border?.color || "#ffffff";
+          const bord = parseBorderValues(el.border);
+          const pad = parsePaddingValues(el.padding);
+          const isRect = shape === "rectangle";
+          const isHeart = shape === "heart" || el.mask_shape === "heart";
           const elRefDim = Math.max(
             50,
             Math.min(
@@ -277,17 +325,18 @@ const PhotobookPageCanvas = ({ page }) => {
               Number(el.height) > 10 ? Number(el.height) : coords.height * 10
             ) || 400
           );
-          const normalizedBorderStroke = borderWidth / elRefDim;
+          const normalizedBorderStroke = (bord.top || bord.width) / elRefDim;
           const shadow = el.shadow || {};
           const shadowFilter =
             shadow.blur > 0
-              ? `drop-shadow(${shadow.offsetX || 0}px ${shadow.offsetY || 4}px ${shadow.blur}px ${
-                  shadow.color || "rgba(0,0,0,0.15)"
-                })`
+              ? `drop-shadow(${shadow.offsetX || 0}px ${shadow.offsetY || 4}px ${shadow.blur}px ${shadow.color || "rgba(0,0,0,0.15)"
+              })`
               : "none";
 
           const radiusVal =
-            el.border?.radius ?? el.corner_radius ?? (isCircle ? 50 : 0);
+            bord.radius ?? el.corner_radius ?? (isCircle ? 50 : 0);
+          const maxBorder = Math.max(bord.top, bord.right, bord.bottom, bord.left, bord.width);
+          const innerRadius = Math.max(0, bord.radius - Math.min(bord.top, bord.left));
           const clipDef = getShapeClipPathDefinition(shape, radiusVal);
           const clipId = `admin-preview-clip-${page.page_id || page.page_number || "pg"}-${elKey}`;
 
@@ -296,6 +345,74 @@ const PhotobookPageCanvas = ({ page }) => {
           const cropOffsetY = el.crop?.offsetY || 0;
           const cropRotation = el.crop?.rotation || 0;
           const isFlipped = Boolean(el.crop?.flipH || el.flip_h);
+          const hasPadding = pad.top > 0 || pad.right > 0 || pad.bottom > 0 || pad.left > 0;
+
+          const elWidth = Math.max(1, Number(el.width) || 100);
+          const borderSvg = (maxBorder * 100) / elWidth;
+          const padVal = Math.max(pad.top || 0, pad.right || 0, pad.bottom || 0, pad.left || 0);
+          const padSvg = (padVal * 100) / elWidth;
+          const maskStroke = padSvg > 0 || borderSvg > 0 ? (borderSvg + 2 * padSvg) : 0;
+          const shape100Def = getShape100Definition(shape, radiusVal);
+          const maskId = `order-preview-mask-${page.page_id || page.page_number || "pg"}-${elKey}`;
+          const elementBg = el.bg_color || el.background?.value;
+
+          if (isRect) {
+            return (
+              <div
+                key={elKey}
+                style={{
+                  ...baseStyle,
+                  filter: shadowFilter,
+                  borderTop: bord.top ? `calc(${bord.top} * (100cqw / 707)) solid ${bord.color}` : undefined,
+                  borderRight: bord.right ? `calc(${bord.right} * (100cqw / 707)) solid ${bord.color}` : undefined,
+                  borderBottom: bord.bottom ? `calc(${bord.bottom} * (100cqw / 707)) solid ${bord.color}` : undefined,
+                  borderLeft: bord.left ? `calc(${bord.left} * (100cqw / 707)) solid ${bord.color}` : undefined,
+                  borderRadius: bord.radius ? `calc(${bord.radius} * (100cqw / 707))` : undefined,
+                  backgroundColor: elementBg || "transparent",
+                  boxSizing: "border-box",
+                }}
+                className="group relative overflow-visible flex items-center justify-center pointer-events-none"
+              >
+                <div
+                  className={`absolute overflow-hidden ${!hasPhoto ? `bg-slate-100/90 border border-dashed border-slate-300 rounded` : ""}`}
+                  style={{
+                    top: pad.top ? `calc(${pad.top} * (100cqw / 707))` : 0,
+                    right: pad.right ? `calc(${pad.right} * (100cqw / 707))` : 0,
+                    bottom: pad.bottom ? `calc(${pad.bottom} * (100cqw / 707))` : 0,
+                    left: pad.left ? `calc(${pad.left} * (100cqw / 707))` : 0,
+                    borderRadius: innerRadius ? `calc(${innerRadius} * (100cqw / 707))` : undefined,
+                  }}
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{ backgroundColor: hasPhoto ? "transparent" : "#f1f5f9" }}
+                  />
+                  {hasPhoto && (
+                    <img
+                      src={displayPhoto}
+                      alt=""
+                      style={{
+                        position: "absolute",
+                        left: `${cropOffsetX}%`,
+                        top: `${cropOffsetY}%`,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: fitMode,
+                        transformOrigin: "50% 50%",
+                        transform: `scale(${cropZoom}) rotate(${cropRotation}deg)${isFlipped ? " scaleX(-1)" : ""}`,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          const totalPadTop = (bord.top !== undefined ? bord.top : bord.width) + (pad.top || 0);
+          const totalPadRight = (bord.right !== undefined ? bord.right : bord.width) + (pad.right || 0);
+          const totalPadBottom = (bord.bottom !== undefined ? bord.bottom : bord.width) + (pad.bottom || 0);
+          const totalPadLeft = (bord.left !== undefined ? bord.left : bord.width) + (pad.left || 0);
 
           return (
             <div
@@ -303,22 +420,41 @@ const PhotobookPageCanvas = ({ page }) => {
               style={{
                 ...baseStyle,
                 filter: shadowFilter,
+                boxSizing: "border-box",
               }}
               className="group relative overflow-visible flex items-center justify-center pointer-events-none"
             >
-              {/* SVG Defs for objectBoundingBox clip */}
-              <svg width="0" height="0" className="absolute pointer-events-none">
+              {/* SVG clip-path definition in objectBoundingBox coordinates */}
+              <svg width="0" height="0" className="absolute pointer-events-none" style={{ position: "absolute", width: 0, height: 0 }}>
                 <defs>
                   <clipPath id={clipId} clipPathUnits="objectBoundingBox">
-                    {renderShapeSvgClip(clipDef)}
+                    {clipDef.type === "circle" && <circle cx={clipDef.cx} cy={clipDef.cy} r={clipDef.r} />}
+                    {clipDef.type === "ellipse" && <ellipse cx={clipDef.cx} cy={clipDef.cy} rx={clipDef.rx} ry={clipDef.ry} />}
+                    {clipDef.type === "path" && <path d={clipDef.d} />}
+                    {clipDef.type === "polygon" && <polygon points={clipDef.points} />}
+                    {clipDef.type === "rect" && <rect x={clipDef.x} y={clipDef.y} width={clipDef.width} height={clipDef.height} rx={clipDef.rx} ry={clipDef.ry} />}
                   </clipPath>
                 </defs>
               </svg>
 
-              {/* Clipped container: HTML clipping with clipPathUnits="objectBoundingBox" guarantees 100% boundary locking */}
+              {/* Outer shape background */}
               <div
-                className="w-full h-full relative overflow-hidden"
+                className="w-full h-full absolute inset-0 pointer-events-none"
                 style={{
+                  backgroundColor: elementBg || "transparent",
+                  clipPath: `url(#${clipId})`,
+                  WebkitClipPath: `url(#${clipId})`,
+                }}
+              />
+
+              {/* Inner photo/placeholder area - Inset uniformly on all sides by (border + padding) */}
+              <div
+                className={`absolute overflow-hidden ${!hasPhoto ? "bg-slate-100/90" : ""}`}
+                style={{
+                  top: totalPadTop ? `calc(${totalPadTop} * (100cqw / 707))` : 0,
+                  right: totalPadRight ? `calc(${totalPadRight} * (100cqw / 707))` : 0,
+                  bottom: totalPadBottom ? `calc(${totalPadBottom} * (100cqw / 707))` : 0,
+                  left: totalPadLeft ? `calc(${totalPadLeft} * (100cqw / 707))` : 0,
                   clipPath: `url(#${clipId})`,
                   WebkitClipPath: `url(#${clipId})`,
                 }}
@@ -327,7 +463,6 @@ const PhotobookPageCanvas = ({ page }) => {
                   className="absolute inset-0"
                   style={{ backgroundColor: hasPhoto ? "transparent" : "#f1f5f9" }}
                 />
-
                 {hasPhoto && (
                   <img
                     src={displayPhoto}
@@ -338,49 +473,23 @@ const PhotobookPageCanvas = ({ page }) => {
                       top: `${cropOffsetY}%`,
                       width: "100%",
                       height: "100%",
-                      objectFit:
-                        fitMode === "contain"
-                          ? "contain"
-                          : fitMode === "stretch" || fitMode === "fill"
-                          ? "fill"
-                          : "cover",
+                      objectFit: fitMode,
                       transformOrigin: "50% 50%",
-                      transform: `scale(${isFlipped ? -cropZoom : cropZoom}, ${cropZoom}) rotate(${cropRotation}deg)`,
-                      transition: "transform 0.1s ease",
-                      maxWidth: "none",
-                      maxHeight: "none",
+                      transform: `scale(${cropZoom}) rotate(${cropRotation}deg)${isFlipped ? " scaleX(-1)" : ""}`,
                       pointerEvents: "none",
-                      userSelect: "none",
                     }}
                   />
                 )}
-
-                {!hasPhoto && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center pointer-events-none">
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                      {el.frame_id ? `Photo ${el.frame_id.split("-").pop()}` : "Empty"}
-                    </span>
-                  </div>
-                )}
               </div>
 
-              {/* Border overlay following the exact clip shape */}
-              {borderWidth > 0 && (
+              {/* Outer Border SVG Overlay */}
+              {maxBorder > 0 && (
                 <svg
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
-                  className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
-                  style={{ zIndex: 10, overflow: "visible" }}
+                  className="w-full h-full absolute inset-0 select-none overflow-visible pointer-events-none"
                 >
-                  <g
-                    transform="scale(100, 100)"
-                    fill="none"
-                    stroke={borderColor}
-                    strokeWidth={normalizedBorderStroke}
-                    vectorEffect="non-scaling-stroke"
-                  >
-                    {renderShapeSvgClip(clipDef)}
-                  </g>
+                  {renderShapeSvgBorder(shape100Def, bord.color, maxBorder)}
                 </svg>
               )}
             </div>
@@ -391,8 +500,15 @@ const PhotobookPageCanvas = ({ page }) => {
         if (el.type === "text") {
           const hasExplicitNewlines =
             el.content && String(el.content).includes("\n");
+          const textBord = parseBorderValues(el.border);
+          const textPad = parsePaddingValues(el.padding);
+          const effectiveFontFamily = el.font_family || el.fontFamily || "Inter";
+          const effectiveFontWeight = el.font_weight || el.fontWeight || "normal";
+          const effectiveFontStyle = el.font_style || el.fontStyle || "normal";
           const effectiveTextTransform =
             el.text_transform || el.textTransform || "none";
+          const effectiveLetterSpacing = el.letter_spacing !== undefined ? el.letter_spacing : (el.letterSpacing !== undefined ? el.letterSpacing : 0);
+          const effectiveLineHeight = el.line_height || el.lineHeight || 1.2;
 
           return (
             <div
@@ -401,17 +517,15 @@ const PhotobookPageCanvas = ({ page }) => {
                 ...baseStyle,
                 width: `${widthPct}%`,
                 maxWidth: "100%",
-                fontFamily: getFontFamilyFallback(
-                  el.font_family || "Playfair Display"
-                ),
+                fontFamily: getFontFamilyFallback(effectiveFontFamily),
                 fontSize: `calc(${Number(el.font_size || 24)} * (100cqw / 707))`,
-                fontWeight: el.font_weight || "normal",
-                fontStyle: el.font_style || "normal",
+                fontWeight: effectiveFontWeight,
+                fontStyle: effectiveFontStyle,
                 textTransform: effectiveTextTransform,
-                letterSpacing: el.letter_spacing
-                  ? `calc(${Number(el.letter_spacing)} * (100cqw / 707))`
+                letterSpacing: effectiveLetterSpacing
+                  ? `calc(${Number(effectiveLetterSpacing)} * (100cqw / 707))`
                   : "normal",
-                lineHeight: el.line_height || 1.2,
+                lineHeight: effectiveLineHeight,
                 color: el.color || "#1f2937",
                 textAlign: el.align || "center",
                 display: "flex",
@@ -420,8 +534,8 @@ const PhotobookPageCanvas = ({ page }) => {
                   el.align === "left"
                     ? "flex-start"
                     : el.align === "right"
-                    ? "flex-end"
-                    : "center",
+                      ? "flex-end"
+                      : "center",
                 wordBreak: "break-word",
                 overflowWrap: "break-word",
                 whiteSpace: hasExplicitNewlines ? "pre-line" : "normal",
@@ -433,14 +547,36 @@ const PhotobookPageCanvas = ({ page }) => {
                   el.background?.type !== "none" && el.background?.value
                     ? el.background.value
                     : el.bg_color || undefined,
-                padding:
-                  el.background?.value || el.bg_color
-                    ? `${el.background?.padding ?? 4}px ${(el.background?.padding ?? 4) * 1.5}px`
+                borderTop: textBord.top ? `calc(${textBord.top} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+                borderRight: textBord.right ? `calc(${textBord.right} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+                borderBottom: textBord.bottom ? `calc(${textBord.bottom} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+                borderLeft: textBord.left ? `calc(${textBord.left} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+                borderRadius: textBord.radius
+                  ? `calc(${textBord.radius} * (100cqw / 707))`
+                  : el.background?.value || el.bg_color
+                    ? `calc(${el.background?.radius ?? 4} * (100cqw / 707))`
                     : undefined,
-                borderRadius:
-                  el.background?.value || el.bg_color
-                    ? `${el.background?.radius ?? 4}px`
+                paddingTop: textPad.top
+                  ? `calc(${textPad.top} * (100cqw / 707))`
+                  : el.background?.value || el.bg_color
+                    ? `calc(${el.background?.padding ?? 4} * (100cqw / 707))`
                     : undefined,
+                paddingRight: textPad.right
+                  ? `calc(${textPad.right} * (100cqw / 707))`
+                  : el.background?.value || el.bg_color
+                    ? `calc(${((el.background?.padding ?? 4) * 1.5)} * (100cqw / 707))`
+                    : undefined,
+                paddingBottom: textPad.bottom
+                  ? `calc(${textPad.bottom} * (100cqw / 707))`
+                  : el.background?.value || el.bg_color
+                    ? `calc(${el.background?.padding ?? 4} * (100cqw / 707))`
+                    : undefined,
+                paddingLeft: textPad.left
+                  ? `calc(${textPad.left} * (100cqw / 707))`
+                  : el.background?.value || el.bg_color
+                    ? `calc(${((el.background?.padding ?? 4) * 1.5)} * (100cqw / 707))`
+                    : undefined,
+                boxSizing: "border-box",
                 zIndex: Math.max(100, Number(el.z_index) || 100),
                 pointerEvents: "none",
               }}
@@ -720,11 +856,10 @@ const RealisticBookPreview = ({
           <button
             type="button"
             onClick={() => setPreviewTheme((prev) => (prev === "dark" ? "light" : "dark"))}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer select-none shadow-2xs ${
-              isDark
-                ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
-                : "bg-white hover:bg-slate-50 text-slate-800 border-slate-200"
-            }`}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer select-none shadow-2xs ${isDark
+              ? "bg-slate-800 hover:bg-slate-700 text-amber-300 border-slate-700"
+              : "bg-white hover:bg-slate-50 text-slate-800 border-slate-200"
+              }`}
             title={`Switch to ${isDark ? "Light" : "Dark"} Studio Background`}
           >
             {isDark ? (
@@ -773,11 +908,10 @@ const RealisticBookPreview = ({
 
       {/* Main 3D Book Stage */}
       <div
-        className={`w-full relative flex items-center justify-center min-h-[460px] py-8 my-2 rounded-2xl shadow-2xl border overflow-hidden transition-colors duration-300 ${
-          isDark
-            ? "bg-gradient-to-b from-[#090d16] via-[#111827] to-[#090d16] border-slate-800"
-            : "bg-gradient-to-b from-[#f8fafc] via-[#e2e8f0] to-[#cbd5e1] border-slate-200"
-        }`}
+        className={`w-full relative flex items-center justify-center min-h-[460px] py-8 my-2 rounded-2xl shadow-2xl border overflow-hidden transition-colors duration-300 ${isDark
+          ? "bg-gradient-to-b from-[#090d16] via-[#111827] to-[#090d16] border-slate-800"
+          : "bg-gradient-to-b from-[#f8fafc] via-[#e2e8f0] to-[#cbd5e1] border-slate-200"
+          }`}
         style={{
           perspective: "2400px",
           perspectiveOrigin: "50% 50%",
@@ -785,9 +919,8 @@ const RealisticBookPreview = ({
       >
         {/* Soft studio table spotlight pattern */}
         <div
-          className={`absolute inset-0 pointer-events-none transition-opacity ${
-            isDark ? "opacity-15" : "opacity-10"
-          }`}
+          className={`absolute inset-0 pointer-events-none transition-opacity ${isDark ? "opacity-15" : "opacity-10"
+            }`}
           style={{
             backgroundImage: isDark
               ? "radial-gradient(#ffffff 1px, transparent 1px)"
@@ -798,9 +931,8 @@ const RealisticBookPreview = ({
 
         {/* Ambient Book Soft Drop Shadow */}
         <div
-          className={`absolute bottom-4 w-[78%] h-9 blur-xl rounded-full pointer-events-none transition-colors ${
-            isDark ? "bg-black/90" : "bg-slate-900/35"
-          }`}
+          className={`absolute bottom-4 w-[78%] h-9 blur-xl rounded-full pointer-events-none transition-colors ${isDark ? "bg-black/90" : "bg-slate-900/35"
+            }`}
         />
 
         {/* Floating Prev Button */}
@@ -808,13 +940,11 @@ const RealisticBookPreview = ({
           type="button"
           onClick={handlePrev}
           disabled={isFirst || isFlipping}
-          className={`absolute left-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full shadow-xl flex items-center justify-center transition-all ${
-            isDark
-              ? "bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-700"
-              : "bg-white/95 hover:bg-white text-slate-800 border border-slate-200"
-          } ${
-            isFirst ? "opacity-25 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
-          }`}
+          className={`absolute left-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full shadow-xl flex items-center justify-center transition-all ${isDark
+            ? "bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-700"
+            : "bg-white/95 hover:bg-white text-slate-800 border border-slate-200"
+            } ${isFirst ? "opacity-25 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
+            }`}
           title="Previous Page (Left Arrow)"
         >
           <MdChevronLeft className="text-2xl" />
@@ -825,13 +955,11 @@ const RealisticBookPreview = ({
           type="button"
           onClick={handleNext}
           disabled={isLast || isFlipping}
-          className={`absolute right-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full shadow-xl flex items-center justify-center transition-all ${
-            isDark
-              ? "bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-700"
-              : "bg-white/95 hover:bg-white text-slate-800 border border-slate-200"
-          } ${
-            isLast ? "opacity-25 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
-          }`}
+          className={`absolute right-3 top-1/2 -translate-y-1/2 z-40 w-11 h-11 rounded-full shadow-xl flex items-center justify-center transition-all ${isDark
+            ? "bg-slate-800/90 hover:bg-slate-700 text-white border border-slate-700"
+            : "bg-white/95 hover:bg-white text-slate-800 border border-slate-200"
+            } ${isLast ? "opacity-25 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95"
+            }`}
           title="Next Page (Right Arrow)"
         >
           <MdChevronRight className="text-2xl" />
@@ -877,11 +1005,10 @@ const RealisticBookPreview = ({
 
             {/* 3D Flipping Leaf */}
             <div
-              className={`absolute top-0 bottom-0 ${
-                flipDirection === "next"
-                  ? "left-1/2 w-1/2 origin-left book-leaf-turning-next"
-                  : "left-0 w-1/2 origin-right book-leaf-turning-prev"
-              }`}
+              className={`absolute top-0 bottom-0 ${flipDirection === "next"
+                ? "left-1/2 w-1/2 origin-left book-leaf-turning-next"
+                : "left-0 w-1/2 origin-right book-leaf-turning-prev"
+                }`}
               style={{
                 transformStyle: "preserve-3d",
                 zIndex: 60,
@@ -1006,11 +1133,10 @@ const RealisticBookPreview = ({
         <button
           onClick={handlePrev}
           disabled={isFirst || isFlipping}
-          className={`flex items-center gap-1 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-150 ${
-            isFirst || isFlipping
-              ? "opacity-30 cursor-not-allowed text-slate-400 bg-slate-50"
-              : "text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:scale-95 shadow-xs cursor-pointer"
-          }`}
+          className={`flex items-center gap-1 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-150 ${isFirst || isFlipping
+            ? "opacity-30 cursor-not-allowed text-slate-400 bg-slate-50"
+            : "text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 active:scale-95 shadow-xs cursor-pointer"
+            }`}
         >
           <MdChevronLeft className="text-lg" />
           <span>Previous</span>
@@ -1028,11 +1154,10 @@ const RealisticBookPreview = ({
         <button
           onClick={handleNext}
           disabled={isLast || isFlipping}
-          className={`flex items-center gap-1 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-150 ${
-            isLast || isFlipping
-              ? "opacity-30 cursor-not-allowed text-slate-400 bg-slate-50"
-              : "text-white bg-teal-600 hover:bg-teal-700 active:scale-95 shadow-sm cursor-pointer"
-          }`}
+          className={`flex items-center gap-1 px-4 py-2 text-xs font-semibold rounded-lg transition-all duration-150 ${isLast || isFlipping
+            ? "opacity-30 cursor-not-allowed text-slate-400 bg-slate-50"
+            : "text-white bg-teal-600 hover:bg-teal-700 active:scale-95 shadow-sm cursor-pointer"
+            }`}
         >
           <span>Next</span>
           <MdChevronRight className="text-lg" />
@@ -1233,10 +1358,10 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
     if (hasBlankPage) {
       const blankInsideFront = pages.find((p) => p.page_id === "blank-inside-front") || {
         page_id: "blank-inside-front",
-        name: "Blank Page",
-        display_label: "Blank Page",
+        name: "Inside Front Cover",
+        display_label: "Inside Front Cover",
         page_type: "blank",
-        page_number: "Blank",
+        page_number: "Inside Cover",
         is_blank: true,
         background: { type: "color", value: "#ffffff" },
         elements: [],
@@ -1244,10 +1369,10 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
 
       const blankInsideBack = pages.find((p) => p.page_id === "blank-inside-back") || {
         page_id: "blank-inside-back",
-        name: "Blank Page",
-        display_label: "Blank Page",
+        name: "Inside Back Cover",
+        display_label: "Inside Back Cover",
         page_type: "blank",
-        page_number: "Blank",
+        page_number: "Inside Cover",
         is_blank: true,
         background: { type: "color", value: "#ffffff" },
         elements: [],
@@ -1285,6 +1410,7 @@ const PhotoBookOrderPreviewModal = ({ open, onClose, orderItem, order }) => {
         stepCount++;
       }
     } else {
+      // Blank page OFF: No inside front cover, Page 1 on left, Page 2 on right
       stepCount = 1;
       for (let i = 0; i < interiorPages.length; i += 2) {
         const leftP = interiorPages[i];

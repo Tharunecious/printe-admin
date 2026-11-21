@@ -353,32 +353,82 @@ export const getCanvasDimensionsForSize = (selectedSize, configSizes = []) => {
   };
 };
 
+export const getCleanSizeName = (name) => {
+  if (!name) return "";
+  return String(name).replace(/\s*\([^)]*\).*/g, "").trim().toLowerCase();
+};
+
 /**
  * Normalizes size string or object to a canonical identifier key
- * (e.g. "8x8", "10x10", "12x12", "A4", "A5")
+ * (e.g. "8x8", "10x10", "12x12", "a4", "portrait", "landscape")
  */
 export const normalizeSizeKey = (size) => {
   if (!size) return "default";
   if (typeof size === "object") {
-    if (size.id) return String(size.id).trim();
-    if (size.name) return String(size.name).trim();
+    if (size.id) return String(size.id).trim().toLowerCase();
+    if (size.name) return String(size.name).trim().toLowerCase();
   }
-  return String(size).trim();
+  return String(size).trim().toLowerCase();
 };
 
 /**
  * Resolves the independent size-specific pages array for a given template and size.
  * Returns { pages, isSizeSpecific, matchedSizeKey, sizeConfig }
- * Fully backward-compatible with legacy single-page templates.
+ * 
+ * Strict Isolation & Orientation Intelligence:
+ * 1. Matches exact size ID, key, full name, or clean name (e.g. "Landscape", "Portrait").
+ * 2. Matches exact dimensions (e.g. "8.5x5.5").
+ * 3. Matches dedicated orientation design (e.g. Landscape book matches landscape/horizontal design,
+ *    Portrait book matches portrait/vertical design).
+ * 4. Fallback to root template pages ONLY if the root design has the matching orientation.
+ *    Never bleeds Portrait elements onto Landscape or vice-versa!
  */
 export const resolveTemplatePagesForSize = (template, size) => {
   if (!template) return { pages: [], isSizeSpecific: false, matchedSizeKey: null };
 
-  const targetStr = String(
+  const sizeObj =
     typeof size === "object" && size !== null
-      ? size.id || size.name || ""
-      : size || ""
-  ).trim().toLowerCase();
+      ? size
+      : buildSizeInfo(size);
+
+  const targetId = String(sizeObj.id || sizeObj._id || "").trim().toLowerCase();
+  const targetName = String(sizeObj.name || "").trim().toLowerCase();
+  const targetCleanName = getCleanSizeName(sizeObj.name);
+  const targetOrientation = String(sizeObj.orientation || "").trim().toLowerCase();
+
+  const isLandscape =
+    targetOrientation === "horizontal" ||
+    targetOrientation === "landscape" ||
+    targetCleanName === "landscape" ||
+    targetName.includes("landscape") ||
+    targetName.includes("horizontal") ||
+    (Number(sizeObj.width_in) > Number(sizeObj.height_in)) ||
+    (Number(sizeObj.singlePageRatio) > 1.05);
+
+  const isPortrait =
+    targetOrientation === "vertical" ||
+    targetOrientation === "portrait" ||
+    targetCleanName === "portrait" ||
+    (targetName.includes("portrait") && !targetName.includes("landscape")) ||
+    targetName.includes("vertical") ||
+    (Number(sizeObj.width_in) < Number(sizeObj.height_in)) ||
+    (Number(sizeObj.singlePageRatio) < 0.95);
+
+  const isSquare =
+    targetOrientation === "square" ||
+    targetCleanName === "square" ||
+    targetName.includes("square") ||
+    (!isLandscape && !isPortrait);
+
+  let targetDim = null;
+  if (sizeObj.width_in && sizeObj.height_in) {
+    targetDim = `${parseFloat(sizeObj.width_in)}x${parseFloat(sizeObj.height_in)}`;
+  } else {
+    const dMatch = String(sizeObj.dimensions || targetName).match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
+    if (dMatch) {
+      targetDim = `${parseFloat(dMatch[1])}x${parseFloat(dMatch[2])}`;
+    }
+  }
 
   const sizeDesigns =
     template.size_designs ||
@@ -387,25 +437,20 @@ export const resolveTemplatePagesForSize = (template, size) => {
 
   const entries = Object.entries(sizeDesigns);
   if (entries.length > 0) {
-    const targetDimMatch = targetStr.match(/(\d+(?:\.\d+)?)\s*[xX*×]\s*(\d+(?:\.\d+)?)/);
-    const targetDim = targetDimMatch
-      ? `${parseFloat(targetDimMatch[1])}x${parseFloat(targetDimMatch[2])}`
-      : (typeof size === "object" && size?.width_in && size?.height_in)
-      ? `${parseFloat(size.width_in)}x${parseFloat(size.height_in)}`
-      : null;
-
+    // ── Tier 1: Exact Match on ID, Key, Full Name, or Clean Name ──
     for (const [key, design] of entries) {
       if (!design || !Array.isArray(design.pages) || design.pages.length === 0) continue;
-      const keyLower = key.toLowerCase();
-      const designIdLower = String(design.size_id || "").toLowerCase();
-      const designNameLower = String(design.size_name || "").toLowerCase();
+      const keyLower = key.toLowerCase().trim();
+      const designIdLower = String(design.size_id || "").toLowerCase().trim();
+      const designNameLower = String(design.size_name || "").toLowerCase().trim();
+      const designCleanName = getCleanSizeName(design.size_name);
 
-      // 1. Direct key, size_id, or size_name match
       if (
-        keyLower === targetStr ||
-        keyLower.replace(/\s+/g, "") === targetStr.replace(/\s+/g, "") ||
-        (designIdLower && designIdLower === targetStr) ||
-        (designNameLower && designNameLower === targetStr)
+        (targetId && (keyLower === targetId || designIdLower === targetId)) ||
+        (targetName && (keyLower === targetName || designNameLower === targetName)) ||
+        (targetCleanName && (keyLower === targetCleanName || designCleanName === targetCleanName)) ||
+        (targetId && keyLower.replace(/\s+/g, "") === targetId.replace(/\s+/g, "")) ||
+        (targetName && keyLower.replace(/\s+/g, "") === targetName.replace(/\s+/g, ""))
       ) {
         return {
           pages: design.pages,
@@ -414,9 +459,12 @@ export const resolveTemplatePagesForSize = (template, size) => {
           sizeConfig: design,
         };
       }
+    }
 
-      // 2. Check dimension match
-      if (targetDim) {
+    // ── Tier 2: Match on Dimensions (e.g. "8.5x5.5" vs "8.5x5.5") ──
+    if (targetDim) {
+      for (const [key, design] of entries) {
+        if (!design || !Array.isArray(design.pages) || design.pages.length === 0) continue;
         const dimStr = [
           design.dimensions || "",
           design.size_name || "",
@@ -434,16 +482,90 @@ export const resolveTemplatePagesForSize = (template, size) => {
         }
       }
     }
+
+    // ── Tier 3: Match on Perspective / Orientation Design ──
+    for (const [key, design] of entries) {
+      if (!design || !Array.isArray(design.pages) || design.pages.length === 0) continue;
+      const keyLower = key.toLowerCase().trim();
+      const dOrient = String(design.orientation || "").toLowerCase().trim();
+      const dName = String(design.size_name || "").toLowerCase().trim();
+      const dClean = getCleanSizeName(design.size_name);
+
+      if (isLandscape) {
+        if (
+          keyLower === "landscape" || keyLower === "horizontal" ||
+          dOrient === "horizontal" || dOrient === "landscape" ||
+          dClean === "landscape" || dClean === "horizontal" ||
+          dName.includes("landscape") || dName.includes("horizontal") ||
+          (design.page_width && design.page_height && Number(design.page_width) > Number(design.page_height))
+        ) {
+          return {
+            pages: design.pages,
+            isSizeSpecific: true,
+            matchedSizeKey: key,
+            sizeConfig: design,
+          };
+        }
+      } else if (isPortrait) {
+        if (
+          keyLower === "portrait" || keyLower === "vertical" ||
+          dOrient === "vertical" || dOrient === "portrait" ||
+          dClean === "portrait" || dClean === "vertical" ||
+          (dName.includes("portrait") && !dName.includes("landscape")) || dName.includes("vertical") ||
+          (design.page_width && design.page_height && Number(design.page_height) > Number(design.page_width))
+        ) {
+          return {
+            pages: design.pages,
+            isSizeSpecific: true,
+            matchedSizeKey: key,
+            sizeConfig: design,
+          };
+        }
+      } else if (isSquare) {
+        if (
+          keyLower === "square" || dOrient === "square" || dClean === "square" || dName.includes("square") ||
+          (design.page_width && design.page_height && Number(design.page_width) === Number(design.page_height))
+        ) {
+          return {
+            pages: design.pages,
+            isSizeSpecific: true,
+            matchedSizeKey: key,
+            sizeConfig: design,
+          };
+        }
+      }
+    }
   }
 
-  // 3. Fallback to template root pages (legacy or base design)
-  const fallbackPages =
+  // ── Tier 4: Fallback to template root pages ONLY if orientation matches ──
+  const rootPages =
     template.pages && template.pages.length > 0
       ? template.pages
       : template.published_snapshot?.pages || [];
 
+  if (rootPages.length > 0) {
+    const rootRatio = Number(template.page_config?.aspect_ratio) || 1;
+    const rootOrient = String(template.page_config?.orientation || "").toLowerCase();
+    const isRootLandscape = rootOrient === "horizontal" || rootOrient === "landscape" || rootRatio > 1.05;
+    const isRootPortrait = rootOrient === "vertical" || rootOrient === "portrait" || rootRatio < 0.95;
+    const isRootSquare = !isRootLandscape && !isRootPortrait;
+
+    if (
+      (isLandscape && isRootLandscape) ||
+      (isPortrait && isRootPortrait) ||
+      (isSquare && isRootSquare)
+    ) {
+      return {
+        pages: rootPages,
+        isSizeSpecific: true,
+        matchedSizeKey: "root",
+      };
+    }
+  }
+
+  // Strictly return empty pages with isSizeSpecific: false so callers create a clean independent layout
   return {
-    pages: fallbackPages,
+    pages: [],
     isSizeSpecific: false,
     matchedSizeKey: null,
   };

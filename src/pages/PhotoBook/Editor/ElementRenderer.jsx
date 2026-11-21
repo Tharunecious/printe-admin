@@ -1,8 +1,60 @@
 import React from "react";
-import { getShapeClipPathDefinition } from "../utils/clipPaths";
-import { PRESET_DECORATIONS, getFontFamilyFallback } from "../utils/presetAssets";
-import { getElementCoords } from "../utils/textUtils";
+import { getShapeClipPathDefinition, getShape100Definition } from "../utils/clipPaths";
+import { PRESET_DECORATIONS, getFontFamilyFallback, dynamicallyLoadGoogleFont } from "../utils/presetAssets";
+import { getElementCoords, parseBorderValues, parsePaddingValues } from "../utils/textUtils";
 import { FaLock, FaImage } from "react-icons/fa";
+
+export const renderShape100 = (def, fill, stroke, strokeWidth, style = {}) => {
+  if (!def) return null;
+  const { type: shapeType, attrs } = def;
+  const props = {
+    ...attrs,
+    fill: fill || "none",
+    stroke: stroke || "none",
+    strokeWidth: strokeWidth || 0,
+    strokeLinejoin: "round",
+    strokeLinecap: "round",
+    style,
+  };
+  if (shapeType === "ellipse") return <ellipse {...props} />;
+  if (shapeType === "path") return <path {...props} />;
+  if (shapeType === "polygon") return <polygon {...props} />;
+  if (shapeType === "rect") return <rect {...props} />;
+  return null;
+};
+
+export const renderShapeSvgBorder = (clipDef, strokeColor, strokeWidthVal) => {
+  if (!clipDef || !strokeWidthVal) return null;
+  const { type: shapeType, attrs } = clipDef;
+
+  const strokeStyle = {
+    strokeWidth: `calc(${strokeWidthVal} * (100cqw / 707))`,
+  };
+
+  const commonProps = {
+    ...attrs,
+    fill: "none",
+    stroke: strokeColor,
+    strokeLinejoin: "round",
+    strokeLinecap: "round",
+    vectorEffect: "non-scaling-stroke",
+    style: strokeStyle,
+  };
+
+  if (shapeType === "ellipse") {
+    return <ellipse {...commonProps} />;
+  }
+  if (shapeType === "path") {
+    return <path {...commonProps} />;
+  }
+  if (shapeType === "polygon") {
+    return <polygon {...commonProps} />;
+  }
+  if (shapeType === "rect") {
+    return <rect {...commonProps} />;
+  }
+  return null;
+};
 
 const ElementRenderer = ({
   element,
@@ -64,103 +116,190 @@ const ElementRenderer = ({
   const renderPhotoFrame = () => {
     const hasImage = Boolean(element.test_image_url);
     const fitMode = element.fit_mode || "cover";
-    const borderWidth = element.border?.width || 0;
-    const borderColor = element.border?.color || "#ffffff";
+    const bord = parseBorderValues(element.border);
+    const pad = parsePaddingValues(element.padding);
     const shadow = element.shadow || {};
     const shadowFilter =
       shadow.blur > 0
         ? `drop-shadow(${shadow.offsetX || 0}px ${shadow.offsetY || 4}px ${shadow.blur}px ${shadow.color || "rgba(0,0,0,0.2)"})`
         : "none";
 
-    const clipId = `clip-${id}`;
+    const isRect = !element.shape || element.shape === "rectangle";
+    const maxBorder = Math.max(bord.top, bord.right, bord.bottom, bord.left, bord.width);
     const cropZoom = element.crop?.zoom || 1;
     const cropOffsetX = element.crop?.offsetX || 0;
     const cropOffsetY = element.crop?.offsetY || 0;
     const cropRotation = element.crop?.rotation || 0;
+    const innerRadius = Math.max(0, bord.radius - Math.min(bord.top, bord.left));
+
+    // For rectangle: standard CSS box model works 100% correctly
+    if (isRect) {
+      return (
+        <div
+          className="w-full h-full relative select-none box-border"
+          style={{
+            borderTop: bord.top ? `calc(${bord.top} * (100cqw / 707)) solid ${bord.color}` : undefined,
+            borderRight: bord.right ? `calc(${bord.right} * (100cqw / 707)) solid ${bord.color}` : undefined,
+            borderBottom: bord.bottom ? `calc(${bord.bottom} * (100cqw / 707)) solid ${bord.color}` : undefined,
+            borderLeft: bord.left ? `calc(${bord.left} * (100cqw / 707)) solid ${bord.color}` : undefined,
+            borderRadius: bord.radius ? `calc(${bord.radius} * (100cqw / 707))` : undefined,
+            backgroundColor: element.bg_color || element.background?.value || "transparent",
+            filter: shadowFilter,
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            className={`absolute overflow-hidden ${!hasImage ? "bg-slate-100/90 border border-dashed border-slate-300 rounded" : ""}`}
+            style={{
+              top: pad.top ? `calc(${pad.top} * (100cqw / 707))` : 0,
+              right: pad.right ? `calc(${pad.right} * (100cqw / 707))` : 0,
+              bottom: pad.bottom ? `calc(${pad.bottom} * (100cqw / 707))` : 0,
+              left: pad.left ? `calc(${pad.left} * (100cqw / 707))` : 0,
+              borderRadius: innerRadius ? `calc(${innerRadius} * (100cqw / 707))` : undefined,
+            }}
+          >
+            {hasImage ? (
+              <img
+                src={element.test_image_url}
+                alt=""
+                style={{
+                  position: "absolute",
+                  left: `${cropOffsetX}%`,
+                  top: `${cropOffsetY}%`,
+                  width: "100%",
+                  height: "100%",
+                  objectFit:
+                    fitMode === "contain"
+                      ? "contain"
+                      : fitMode === "stretch" || fitMode === "fill"
+                        ? "fill"
+                        : "cover",
+                  transformOrigin: "50% 50%",
+                  transform: `scale(${cropZoom}) rotate(${cropRotation}deg)`,
+                  transition: "transform 0.1s ease",
+                  maxWidth: "none",
+                  maxHeight: "none",
+                  pointerEvents: "none",
+                }}
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center pointer-events-none">
+                <div className="bg-white/80 backdrop-blur-sm p-2 rounded-full shadow-sm mb-1 text-slate-500">
+                  <FaImage className="text-xl text-teal-600" />
+                </div>
+                <span className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
+                  {element.frame_id || "Photo Placeholder"}
+                </span>
+                <span className="text-[10px] text-slate-500">
+                  {element.shape || "rectangle"} • {fitMode}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // For all custom shapes (heart, star, hexagon, scallop, arch, circle):
+    // Use objectBoundingBox SVG clip-path with uniform inset to guarantee 100% EVEN gap and border on all sides!
+    const shapeClipDef = getShapeClipPathDefinition(element.shape || "rectangle", bord.radius || 0);
+    const shape100Def = getShape100Definition(element.shape || "rectangle", bord.radius || 0);
+    const clipId = `clip-${id}`;
+    const elementBg = element.bg_color || element.background?.value;
+    const totalPadTop = (bord.top !== undefined ? bord.top : bord.width) + (pad.top || 0);
+    const totalPadRight = (bord.right !== undefined ? bord.right : bord.width) + (pad.right || 0);
+    const totalPadBottom = (bord.bottom !== undefined ? bord.bottom : bord.width) + (pad.bottom || 0);
+    const totalPadLeft = (bord.left !== undefined ? bord.left : bord.width) + (pad.left || 0);
 
     return (
       <div
-        className="w-full h-full relative select-none"
+        className="w-full h-full relative select-none box-border"
         style={{
           filter: shadowFilter,
         }}
       >
-        <svg
-          width="100%"
-          height="100%"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          className="overflow-visible w-full h-full"
-        >
+        {/* SVG clip-path definition in objectBoundingBox coordinates */}
+        <svg width="0" height="0" className="absolute pointer-events-none" style={{ position: "absolute", width: 0, height: 0 }}>
           <defs>
-            <clipPath id={clipId}>
-              {renderClipContent(true)}
+            <clipPath id={clipId} clipPathUnits="objectBoundingBox">
+              {shapeClipDef.type === "ellipse" && <ellipse {...shapeClipDef.attrs} />}
+              {shapeClipDef.type === "path" && <path {...shapeClipDef.attrs} />}
+              {shapeClipDef.type === "polygon" && <polygon {...shapeClipDef.attrs} />}
+              {shapeClipDef.type === "rect" && <rect {...shapeClipDef.attrs} />}
             </clipPath>
           </defs>
-
-          {/* Group firmly clipped to shape: keeps photo zoom & pan inside container */}
-          <g clipPath={`url(#${clipId})`}>
-            {/* Background of frame when empty */}
-            <rect
-              x="0"
-              y="0"
-              width="100"
-              height="100"
-              fill={hasImage ? "transparent" : "#f1f5f9"}
-            />
-
-            {/* Photo inside frame clipped with SVG clipPath with Photoshop crop & pan */}
-            {hasImage && (
-              <image
-                href={element.test_image_url}
-                x={`${cropOffsetX}%`}
-                y={`${cropOffsetY}%`}
-                width="100"
-                height="100"
-                preserveAspectRatio={
-                  fitMode === "contain" ? "xMidYMid meet" : "xMidYMid slice"
-                }
-                style={{
-                  transformOrigin: "50% 50%",
-                  transform: `scale(${cropZoom}) rotate(${cropRotation}deg)`,
-                  transition: "transform 0.1s ease",
-                }}
-              />
-            )}
-          </g>
-
-          {/* Border overlay following the exact clip shape */}
-          {borderWidth > 0 && (
-            <g
-              transform="scale(100, 100)"
-              fill="none"
-              stroke={borderColor}
-              strokeWidth={borderWidth / Math.min(width || 100, height || 100)}
-              vectorEffect="non-scaling-stroke"
-            >
-              {renderClipContent()}
-            </g>
-          )}
         </svg>
 
-        {/* Empty placeholder guide in editor mode */}
-        {!hasImage && (
-          <div
-            className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center pointer-events-none"
-            style={{
-              clipPath: `url(#${clipId})`,
-            }}
-          >
-            <div className="bg-white/80 backdrop-blur-sm p-2 rounded-full shadow-sm mb-1 text-slate-500">
-              <FaImage className="text-xl text-teal-600" />
+        {/* Outer shape background (visible in the padding gap / matting area) */}
+        <div
+          className="w-full h-full absolute inset-0 pointer-events-none"
+          style={{
+            backgroundColor: elementBg || "transparent",
+            clipPath: `url(#${clipId})`,
+            WebkitClipPath: `url(#${clipId})`,
+          }}
+        />
+
+        {/* Inner photo/placeholder area - Inset uniformly on all sides by (border + padding) */}
+        <div
+          className={`absolute overflow-hidden ${!hasImage ? "bg-slate-100/90" : ""}`}
+          style={{
+            top: totalPadTop ? `calc(${totalPadTop} * (100cqw / 707))` : 0,
+            right: totalPadRight ? `calc(${totalPadRight} * (100cqw / 707))` : 0,
+            bottom: totalPadBottom ? `calc(${totalPadBottom} * (100cqw / 707))` : 0,
+            left: totalPadLeft ? `calc(${totalPadLeft} * (100cqw / 707))` : 0,
+            clipPath: `url(#${clipId})`,
+            WebkitClipPath: `url(#${clipId})`,
+          }}
+        >
+          {hasImage ? (
+            <img
+              src={element.test_image_url}
+              alt=""
+              style={{
+                position: "absolute",
+                left: `${cropOffsetX}%`,
+                top: `${cropOffsetY}%`,
+                width: "100%",
+                height: "100%",
+                objectFit:
+                  fitMode === "contain"
+                    ? "contain"
+                    : fitMode === "stretch" || fitMode === "fill"
+                      ? "fill"
+                      : "cover",
+                transformOrigin: "50% 50%",
+                transform: `scale(${cropZoom}) rotate(${cropRotation}deg)`,
+                transition: "transform 0.1s ease",
+                maxWidth: "none",
+                maxHeight: "none",
+                pointerEvents: "none",
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-2 text-center pointer-events-none">
+              <div className="bg-white/80 backdrop-blur-sm p-2 rounded-full shadow-sm mb-1 text-slate-500">
+                <FaImage className="text-xl text-teal-600" />
+              </div>
+              <span className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
+                {element.frame_id || "Photo Placeholder"}
+              </span>
+              <span className="text-[10px] text-slate-500">
+                {element.shape || "rectangle"} • {fitMode}
+              </span>
             </div>
-            <span className="text-xs font-semibold text-slate-700 tracking-wide uppercase">
-              {element.frame_id || "Photo Placeholder"}
-            </span>
-            <span className="text-[10px] text-slate-500 capitalize">
-              {element.shape || "rectangle"} • {fitMode}
-            </span>
-          </div>
+          )}
+        </div>
+
+        {/* Outer Border SVG Overlay */}
+        {maxBorder > 0 && (
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            className="w-full h-full absolute inset-0 select-none overflow-visible pointer-events-none"
+          >
+            {renderShapeSvgBorder(shape100Def, bord.color, maxBorder)}
+          </svg>
         )}
       </div>
     );
@@ -176,6 +315,7 @@ const ElementRenderer = ({
           fontWeight: "inherit",
           fontStyle: "inherit",
           letterSpacing: "inherit",
+          textTransform: element.text_transform || element.textTransform || "none",
           minWidth: "max-content",
           maxWidth: "100%",
           whiteSpace: hasExplicitNewlines ? "pre-line" : "nowrap",
@@ -187,8 +327,8 @@ const ElementRenderer = ({
         {element.content !== undefined && element.content !== null && String(element.content).trim().length > 0
           ? element.content
           : isSelected
-          ? "|"
-          : ""}
+            ? "|"
+            : ""}
       </span>
     );
   };
@@ -252,7 +392,9 @@ const ElementRenderer = ({
     type === "photo_frame" &&
     ["circle", "heart", "star", "scallop", "hexagon"].includes(element.shape || element.mask_shape);
 
-  const effectiveFont = getFontFamilyFallback(element.font_family || "Inter");
+  const effectiveFontName = element.font_family || element.fontFamily || "Inter";
+  if (type === "text") dynamicallyLoadGoogleFont(effectiveFontName);
+  const effectiveFont = getFontFamilyFallback(effectiveFontName);
   const hasExplicitNewlines = element.content && String(element.content).includes("\n");
 
   return (
@@ -265,9 +407,8 @@ const ElementRenderer = ({
         e.stopPropagation();
         if (!previewMode && onSelect) onSelect(element);
       }}
-      className={`absolute cursor-pointer transition-shadow ${
-        isSelected && !previewMode ? "ring-2 ring-teal-500 shadow-md" : ""
-      }`}
+      className={`absolute cursor-pointer transition-shadow ${isSelected && !previewMode ? "ring-2 ring-teal-500 shadow-md" : ""
+        }`}
       style={{
         left: `${leftPct}%`,
         top: `${topPct}%`,
@@ -279,9 +420,13 @@ const ElementRenderer = ({
         transformOrigin: "center center",
         zIndex: isSelected ? 150 : Math.max(1, Number(z_index) || 1),
         ...(type === "text"
-          ? {
+          ? (() => {
+            const textBord = parseBorderValues(element.border);
+            const textPad = parsePaddingValues(element.padding);
+            return {
               "--photobook-font": effectiveFont,
               fontFamily: effectiveFont,
+              textTransform: element.text_transform || element.textTransform || "none",
               fontSize: `calc(${Number(element.font_size || 24)} * (100cqw / 707))`,
               fontWeight: element.font_weight || "normal",
               fontStyle: element.font_style || "normal",
@@ -295,8 +440,8 @@ const ElementRenderer = ({
                 element.align === "left"
                   ? "flex-start"
                   : element.align === "right"
-                  ? "flex-end"
-                  : "center",
+                    ? "flex-end"
+                    : "center",
               wordBreak: "break-word",
               overflowWrap: "break-word",
               whiteSpace: hasExplicitNewlines ? "pre-line" : "normal",
@@ -308,15 +453,38 @@ const ElementRenderer = ({
                 element.background?.type !== "none" && element.background?.value
                   ? element.background.value
                   : element.bg_color || undefined,
-              padding:
-                element.background?.value || element.bg_color
-                  ? `${element.background?.padding ?? 4}px ${(element.background?.padding ?? 4) * 1.5}px`
+              borderTop: textBord.top ? `calc(${textBord.top} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+              borderRight: textBord.right ? `calc(${textBord.right} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+              borderBottom: textBord.bottom ? `calc(${textBord.bottom} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+              borderLeft: textBord.left ? `calc(${textBord.left} * (100cqw / 707)) solid ${textBord.color}` : undefined,
+              borderRadius: textBord.radius
+                ? `calc(${textBord.radius} * (100cqw / 707))`
+                : element.background?.value || element.bg_color
+                  ? `calc(${element.background?.radius ?? 4} * (100cqw / 707))`
                   : undefined,
-              borderRadius:
-                element.background?.value || element.bg_color
-                  ? `${element.background?.radius ?? 4}px`
+              paddingTop: textPad.top
+                ? `calc(${textPad.top} * (100cqw / 707))`
+                : element.background?.value || element.bg_color
+                  ? `calc(${element.background?.padding ?? 4} * (100cqw / 707))`
                   : undefined,
-            }
+              paddingRight: textPad.right
+                ? `calc(${textPad.right} * (100cqw / 707))`
+                : element.background?.value || element.bg_color
+                  ? `calc(${((element.background?.padding ?? 4) * 1.5)} * (100cqw / 707))`
+                  : undefined,
+              paddingBottom: textPad.bottom
+                ? `calc(${textPad.bottom} * (100cqw / 707))`
+                : element.background?.value || element.bg_color
+                  ? `calc(${element.background?.padding ?? 4} * (100cqw / 707))`
+                  : undefined,
+              paddingLeft: textPad.left
+                ? `calc(${textPad.left} * (100cqw / 707))`
+                : element.background?.value || element.bg_color
+                  ? `calc(${((element.background?.padding ?? 4) * 1.5)} * (100cqw / 707))`
+                  : undefined,
+              boxSizing: "border-box",
+            };
+          })()
           : {}),
       }}
     >

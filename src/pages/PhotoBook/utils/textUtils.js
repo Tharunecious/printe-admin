@@ -1,6 +1,45 @@
 import { getFontFamilyFallback } from "./presetAssets";
 
 /**
+ * Universal 4-Sided Border Parser
+ * Supports uniform width as well as independent top, right, bottom, left borders.
+ */
+export const parseBorderValues = (border) => {
+  if (!border) {
+    return { top: 0, right: 0, bottom: 0, left: 0, width: 0, color: "#ffffff", radius: 0 };
+  }
+  const defaultWidth = Number(border.width) || 0;
+  return {
+    top: border.top !== undefined ? Number(border.top) : defaultWidth,
+    right: border.right !== undefined ? Number(border.right) : defaultWidth,
+    bottom: border.bottom !== undefined ? Number(border.bottom) : defaultWidth,
+    left: border.left !== undefined ? Number(border.left) : defaultWidth,
+    width: defaultWidth || Number(border.top) || 0,
+    color: border.color || "#ffffff",
+    radius: border.radius !== undefined ? Number(border.radius) : (Number(border.corner_radius) || 0),
+  };
+};
+
+/**
+ * Universal 4-Sided Padding Parser
+ * Supports uniform padding as well as independent top, right, bottom, left paddings.
+ */
+export const parsePaddingValues = (padding) => {
+  if (!padding) {
+    return { top: 0, right: 0, bottom: 0, left: 0 };
+  }
+  if (typeof padding === "number") {
+    return { top: padding, right: padding, bottom: padding, left: padding };
+  }
+  return {
+    top: Number(padding.top) || 0,
+    right: Number(padding.right) || 0,
+    bottom: Number(padding.bottom) || 0,
+    left: Number(padding.left) || 0,
+  };
+};
+
+/**
  * Accurately calculates text width % and height % based on letters typed,
  * font family, font size, letter spacing, and canvas dimensions.
  *
@@ -18,6 +57,8 @@ export const calculateDynamicTextDimensions = ({
   lineHeight = 1.2,
   canvasWidth = 707,
   canvasHeight = 1000,
+  padding = null,
+  border = null,
 }) => {
   const text = String(content ?? "");
   const numFontSize = Number(fontSize) || 24;
@@ -26,17 +67,25 @@ export const calculateDynamicTextDimensions = ({
   const numLetterSpacing = Number(letterSpacing) || 0;
   const numLineHeight = Number(lineHeight) || 1.2;
 
+  // Font size rendered on canvas is proportional to 707 standard container width
+  const effectiveFontSizePx = (numFontSize * numCanvasW) / 707;
+  const effectiveLetterSpacingPx = numLetterSpacing ? (numLetterSpacing * numCanvasW) / 707 : 0;
+
   // 1. If there is no letter, width is low (1%)
   if (!text || text.trim().length === 0) {
-    const minWidthPct = 1.0; // 1%
-    const minHeightPx = Math.max(16, Math.round(numFontSize * 1.2));
+    const pad = parsePaddingValues(padding);
+    const bord = parseBorderValues(border);
+    const extraWPx = (pad.left + pad.right) + (bord.left + bord.right);
+    const extraHPx = (pad.top + pad.bottom) + (bord.top + bord.bottom);
+    const minWidthPct = Number((((10 + extraWPx) / numCanvasW) * 100).toFixed(2));
+    const minHeightPx = Math.max(16, Math.round(effectiveFontSizePx * 1.2)) + extraHPx;
     const minHeightPct = Number(((minHeightPx / numCanvasH) * 100).toFixed(2));
     return {
-      width_pct: minWidthPct,
+      width_pct: Math.max(1.0, minWidthPct),
       height_pct: Math.max(1.0, minHeightPct),
       width: Math.max(10, Math.round((minWidthPct / 100) * numCanvasW)),
       height: minHeightPx,
-      width_str: `${minWidthPct}%`,
+      width_str: `${Math.max(1.0, minWidthPct)}%`,
       height_str: `${Math.max(1.0, minHeightPct)}%`,
     };
   }
@@ -51,13 +100,13 @@ export const calculateDynamicTextDimensions = ({
       const ctx = canvas.getContext("2d");
       if (ctx) {
         const fallback = getFontFamilyFallback(fontFamily);
-        ctx.font = `${fontStyle || "normal"} ${fontWeight || "normal"} ${numFontSize}px ${fallback}`;
+        ctx.font = `${fontStyle || "normal"} ${fontWeight || "normal"} ${effectiveFontSizePx}px ${fallback}`;
         
         for (const line of lines) {
           const metrics = ctx.measureText(line || " ");
           let w = metrics.width;
-          if (numLetterSpacing && line.length > 1) {
-            w += (line.length - 1) * numLetterSpacing;
+          if (effectiveLetterSpacingPx && line.length > 1) {
+            w += (line.length - 1) * effectiveLetterSpacingPx;
           }
           if (w > maxLineWidthPx) {
             maxLineWidthPx = w;
@@ -71,16 +120,22 @@ export const calculateDynamicTextDimensions = ({
 
   // Fallback estimation if canvas measurement returned 0
   if (maxLineWidthPx <= 0) {
-    const avgCharW = numFontSize * 0.58;
+    const avgCharW = effectiveFontSizePx * 0.58;
     for (const line of lines) {
-      const w = (line.length * avgCharW) + (line.length * numLetterSpacing);
+      const w = (line.length * avgCharW) + (line.length * effectiveLetterSpacingPx);
       if (w > maxLineWidthPx) maxLineWidthPx = w;
     }
   }
 
+  // Parse element borders and paddings to expand the bounding box accurately
+  const pad = parsePaddingValues(padding);
+  const bord = parseBorderValues(border);
+  const extraWPx = (pad.left + pad.right) + (bord.left + bord.right);
+  const extraHPx = (pad.top + pad.bottom) + (bord.top + bord.bottom);
+
   // Add generous breathing room (padding) so cursive / italic letter flourishes don't clip
-  const paddingPx = Math.max(20, Math.round(numFontSize * 0.5));
-  const totalWidthPx = maxLineWidthPx + paddingPx;
+  const paddingPx = Math.max(12, Math.round(effectiveFontSizePx * 0.35));
+  const totalWidthPx = maxLineWidthPx + paddingPx + extraWPx;
 
   // Convert to % of canvas width
   const calcWidthPct = Number(((totalWidthPx / numCanvasW) * 100).toFixed(2));
@@ -88,8 +143,8 @@ export const calculateDynamicTextDimensions = ({
 
   // Compute height based on number of lines
   const totalHeightPx = Math.max(
-    Math.round(lines.length * (numFontSize * numLineHeight) + 4),
-    Math.round(numFontSize * 1.2)
+    Math.round(lines.length * (effectiveFontSizePx * numLineHeight) + 4) + extraHPx,
+    Math.round(effectiveFontSizePx * 1.2) + extraHPx
   );
   const calcHeightPct = Number(((totalHeightPx / numCanvasH) * 100).toFixed(2));
   const finalHeightPct = Math.min(100, Math.max(1.0, calcHeightPct));
@@ -206,8 +261,8 @@ export const getElementCoords = (el) => {
       canvasHeight: 1000,
     });
 
-    width = Math.max(width, dynamicDims.width_pct);
-    height = Math.max(height, dynamicDims.height_pct);
+    width = dynamicDims.width_pct;
+    height = dynamicDims.height_pct;
 
     // Only for legacy template elements lacking explicit percentage coordinate, anchor them centered
     if (el.x_pct === undefined && (typeof el.x === "number" && el.x > 1)) {

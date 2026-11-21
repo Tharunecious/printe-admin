@@ -33,9 +33,253 @@ import {
 } from "react-icons/md";
 import { FiRotateCw, FiZoomIn, FiMove, FiRefreshCw } from "react-icons/fi";
 
-import { calculateDynamicTextDimensions, adjustTextPositionForNewWidth } from "../../utils/textUtils";
+import { calculateDynamicTextDimensions, adjustTextPositionForNewWidth, parseBorderValues, parsePaddingValues, getElementCoords } from "../../utils/textUtils";
 import BackgroundRepositionModal from "./BackgroundRepositionModal";
 import { MdCenterFocusStrong } from "react-icons/md";
+import { LuFlipHorizontal, LuFlipVertical } from "react-icons/lu";
+
+// ── 4-Sided Border Control Component ──
+const FourSidedBorderControl = ({ border, onChange, showRadius = true }) => {
+  const b = parseBorderValues(border);
+  const [isLinked, setIsLinked] = useState(
+    b.top === b.right && b.right === b.bottom && b.bottom === b.left
+  );
+
+  const handleSideChange = (side, val) => {
+    const num = Math.max(0, Number(val) || 0);
+    if (isLinked || side === "all") {
+      onChange({
+        ...b,
+        top: num,
+        right: num,
+        bottom: num,
+        left: num,
+        width: num,
+      });
+    } else {
+      const next = { ...b, [side]: num };
+      next.width = next.top;
+      onChange(next);
+    }
+  };
+
+  return (
+    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-slate-700">Border (4 Sides)</label>
+        <button
+          type="button"
+          onClick={() => setIsLinked(!isLinked)}
+          className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium transition-all ${
+            isLinked ? "bg-teal-100 text-teal-800" : "bg-slate-200 text-slate-700"
+          }`}
+          title={isLinked ? "All sides linked (click for independent sides)" : "Independent sides (click to link all)"}
+        >
+          {isLinked ? <MdLockOutline size={12} /> : <MdLockOpen size={12} />}
+          <span>{isLinked ? "Linked" : "Independent"}</span>
+        </button>
+      </div>
+
+      {isLinked ? (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-slate-500 font-medium w-16">All Sides</span>
+          <InputNumber
+            size="small"
+            min={0}
+            max={60}
+            value={b.top}
+            onChange={(val) => handleSideChange("all", val)}
+            addonAfter="px"
+            className="flex-1"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Top</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={60}
+              value={b.top}
+              onChange={(val) => handleSideChange("top", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Right</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={60}
+              value={b.right}
+              onChange={(val) => handleSideChange("right", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Bottom</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={60}
+              value={b.bottom}
+              onChange={(val) => handleSideChange("bottom", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Left</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={60}
+              value={b.left}
+              onChange={(val) => handleSideChange("left", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Border Color */}
+      <div className="flex items-center justify-between pt-1">
+        <span className="text-[10px] text-slate-600 font-medium">Border Color</span>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={b.color}
+            onChange={(e) => onChange({ ...b, color: e.target.value })}
+            className="w-6 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+          />
+          <span className="text-[10px] font-mono text-slate-600 uppercase">{b.color}</span>
+        </div>
+      </div>
+
+      {/* Corner Radius */}
+      {showRadius && (
+        <div className="pt-1">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-slate-600 font-medium">Corner Radius</span>
+            <span className="text-[10px] font-mono text-teal-600">{b.radius}px</span>
+          </div>
+          <Slider
+            min={0}
+            max={60}
+            value={b.radius}
+            onChange={(val) => onChange({ ...b, radius: val })}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── 4-Sided Padding Control Component ──
+const FourSidedPaddingControl = ({ padding, onChange }) => {
+  const p = parsePaddingValues(padding);
+  const [isLinked, setIsLinked] = useState(
+    p.top === p.right && p.right === p.bottom && p.bottom === p.left
+  );
+
+  const handleSideChange = (side, val) => {
+    const num = Math.max(0, Number(val) || 0);
+    if (isLinked || side === "all") {
+      onChange({ top: num, right: num, bottom: num, left: num });
+    } else {
+      onChange({ ...p, [side]: num });
+    }
+  };
+
+  return (
+    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-slate-700">Padding (4 Sides)</label>
+        <button
+          type="button"
+          onClick={() => setIsLinked(!isLinked)}
+          className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded font-medium transition-all ${
+            isLinked ? "bg-teal-100 text-teal-800" : "bg-slate-200 text-slate-700"
+          }`}
+          title={isLinked ? "All sides linked (click for independent sides)" : "Independent sides (click to link all)"}
+        >
+          {isLinked ? <MdLockOutline size={12} /> : <MdLockOpen size={12} />}
+          <span>{isLinked ? "Linked" : "Independent"}</span>
+        </button>
+      </div>
+
+      {isLinked ? (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-slate-500 font-medium w-16">All Sides</span>
+          <InputNumber
+            size="small"
+            min={0}
+            max={80}
+            value={p.top}
+            onChange={(val) => handleSideChange("all", val)}
+            addonAfter="px"
+            className="flex-1"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Top</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={80}
+              value={p.top}
+              onChange={(val) => handleSideChange("top", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Right</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={80}
+              value={p.right}
+              onChange={(val) => handleSideChange("right", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Bottom</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={80}
+              value={p.bottom}
+              onChange={(val) => handleSideChange("bottom", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-500 font-semibold w-5">Left</span>
+            <InputNumber
+              size="small"
+              min={0}
+              max={80}
+              value={p.left}
+              onChange={(val) => handleSideChange("left", val)}
+              addonAfter="px"
+              className="w-full"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const PropertiesPanel = ({
   selectedElement,
@@ -423,6 +667,54 @@ const PropertiesPanel = ({
                 Apply Custom Gradient
               </Button>
 
+              {/* Flip Gradient Background */}
+              {bg.type === "gradient" && bg.value && (
+                <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+                      Flip Gradient
+                    </span>
+                    {(bg.flip_h || bg.flip_v) && (
+                      <button
+                        type="button"
+                        onClick={() => onSetBackground({ ...bg, flip_h: false, flip_v: false })}
+                        className="text-[10px] text-teal-600 hover:text-teal-700 font-semibold cursor-pointer"
+                      >
+                        Reset Flip
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onSetBackground({ ...bg, flip_h: !bg.flip_h })}
+                      className={`py-1.5 px-2 rounded-md border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        bg.flip_h
+                          ? "bg-teal-600 text-white border-teal-600 shadow-xs ring-1 ring-teal-400"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-teal-400 hover:bg-teal-50/50"
+                      }`}
+                      title="Flip gradient horizontally"
+                    >
+                      <LuFlipHorizontal className="text-sm" />
+                      <span>Flip Horiz</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSetBackground({ ...bg, flip_v: !bg.flip_v })}
+                      className={`py-1.5 px-2 rounded-md border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        bg.flip_v
+                          ? "bg-teal-600 text-white border-teal-600 shadow-xs ring-1 ring-teal-400"
+                          : "bg-white text-slate-700 border-slate-200 hover:border-teal-400 hover:bg-teal-50/50"
+                      }`}
+                      title="Flip gradient vertically"
+                    >
+                      <LuFlipVertical className="text-sm" />
+                      <span>Flip Vert</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Preset Gradients List */}
               <div className="space-y-1.5 pt-2 border-t border-slate-200">
                 <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wide block">
@@ -532,6 +824,8 @@ const PropertiesPanel = ({
                           ? (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "contain")
                           : (bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : "cover"),
                       backgroundRepeat: "no-repeat",
+                      transform: (bg.flip_h || bg.flip_v) ? `scale(${bg.flip_h ? -1 : 1}, ${bg.flip_v ? -1 : 1})` : undefined,
+                      transformOrigin: "center center",
                     }}
                     className="relative rounded-lg overflow-hidden border border-slate-300 h-24 bg-slate-100 flex items-center justify-center shadow-xs"
                   >
@@ -540,6 +834,8 @@ const PropertiesPanel = ({
                       {bg.fit_mode !== "stretch" && bg.fit_mode !== "100% 100%" && (
                         <span>• Focus: {bg.position_x ?? 50}% {bg.position_y ?? 50}%</span>
                       )}
+                      {bg.flip_h && <span className="text-amber-300 font-bold">• Flip H</span>}
+                      {bg.flip_v && <span className="text-amber-300 font-bold">• Flip V</span>}
                     </div>
                     <button
                       onClick={() => onSetBackground({ ...bg, value: "" })}
@@ -560,6 +856,52 @@ const PropertiesPanel = ({
                   >
                     Select Visible Part & Pan
                   </Button>
+
+                  {/* Flip Background Options (Horizontal & Vertical) */}
+                  <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+                        Flip Background
+                      </span>
+                      {(bg.flip_h || bg.flip_v) && (
+                        <button
+                          type="button"
+                          onClick={() => onSetBackground({ ...bg, flip_h: false, flip_v: false })}
+                          className="text-[10px] text-teal-600 hover:text-teal-700 font-semibold cursor-pointer"
+                        >
+                          Reset Flip
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onSetBackground({ ...bg, flip_h: !bg.flip_h })}
+                        className={`py-1.5 px-2 rounded-md border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          bg.flip_h
+                            ? "bg-teal-600 text-white border-teal-600 shadow-xs ring-1 ring-teal-400"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-teal-400 hover:bg-teal-50/50"
+                        }`}
+                        title="Flip background horizontally"
+                      >
+                        <LuFlipHorizontal className="text-sm" />
+                        <span>Flip Horiz</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSetBackground({ ...bg, flip_v: !bg.flip_v })}
+                        className={`py-1.5 px-2 rounded-md border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          bg.flip_v
+                            ? "bg-teal-600 text-white border-teal-600 shadow-xs ring-1 ring-teal-400"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-teal-400 hover:bg-teal-50/50"
+                        }`}
+                        title="Flip background vertically"
+                      >
+                        <LuFlipVertical className="text-sm" />
+                        <span>Flip Vert</span>
+                      </button>
+                    </div>
+                  </div>
 
                   {/* In-Panel Quick Position Presets */}
                   <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 space-y-1.5">
@@ -1052,62 +1394,16 @@ const PropertiesPanel = ({
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">
-              Border Width & Color
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={selectedElement.border?.color || "#ffffff"}
-                onChange={(e) =>
-                  onUpdateElement(id, {
-                    border: {
-                      ...(selectedElement.border || {}),
-                      color: e.target.value,
-                    },
-                  })
-                }
-                className="w-7 h-7 p-0 rounded border border-slate-300"
-              />
-              <InputNumber
-                size="small"
-                min={0}
-                max={40}
-                value={selectedElement.border?.width || 0}
-                onChange={(w) =>
-                  onUpdateElement(id, {
-                    border: {
-                      ...(selectedElement.border || {}),
-                      width: w || 0,
-                    },
-                  })
-                }
-                addonAfter="px"
-              />
-            </div>
-          </div>
+          <FourSidedBorderControl
+            border={selectedElement.border}
+            onChange={(border) => onUpdateElement(id, { border })}
+            showRadius={selectedElement.shape === "rectangle"}
+          />
 
-          {selectedElement.shape === "rectangle" && (
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">
-                Corner Radius
-              </label>
-              <Slider
-                min={0}
-                max={50}
-                value={selectedElement.border?.radius || 0}
-                onChange={(r) =>
-                  onUpdateElement(id, {
-                    border: {
-                      ...(selectedElement.border || {}),
-                      radius: r,
-                    },
-                  })
-                }
-              />
-            </div>
-          )}
+          <FourSidedPaddingControl
+            padding={selectedElement.padding}
+            onChange={(padding) => onUpdateElement(id, { padding })}
+          />
 
           <div className="flex items-center justify-between pt-1">
             <div>
@@ -1146,13 +1442,8 @@ const PropertiesPanel = ({
             lineHeight: merged.line_height,
             canvasWidth: canvasW,
             canvasHeight: canvasH,
-          });
-
-          const newX = adjustTextPositionForNewWidth({
-            oldXPct: selectedElement.x_pct,
-            oldWidthPct: selectedElement.width_pct,
-            newWidthPct: dims.width_pct,
-            align: merged.align || "center",
+            padding: merged.padding,
+            border: merged.border,
           });
 
           onUpdateElement(id, {
@@ -1163,9 +1454,6 @@ const PropertiesPanel = ({
             height: dims.height,
             width_str: dims.width_str,
             height_str: dims.height_str,
-            x_pct: newX,
-            x_str: `${newX}%`,
-            x: Math.round((newX / 100) * canvasW),
           });
         };
 
@@ -1185,6 +1473,10 @@ const PropertiesPanel = ({
                 placeholder="Type your text here..."
                 value={selectedElement.content ?? ""}
                 onChange={(e) => updateTextProperties({ content: e.target.value })}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{ textTransform: "none" }}
               />
             </div>
 
@@ -1294,6 +1586,7 @@ const PropertiesPanel = ({
                     style={{
                       fontFamily: fontCss,
                       "--photobook-font": fontCss,
+                      textTransform: selectedElement.text_transform || selectedElement.textTransform || "none",
                       fontWeight: selectedElement.font_weight || "normal",
                       fontStyle: selectedElement.font_style || "normal",
                       color: textColor,
@@ -1474,6 +1767,43 @@ const PropertiesPanel = ({
                   <MdFormatAlignRight size={14} />
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* ==================== TEXT CASING / TRANSFORM ==================== */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-slate-700">
+                Letter Case / Transform
+              </label>
+              <span className="text-[10px] text-teal-600 font-mono font-medium">
+                {(selectedElement.text_transform || selectedElement.textTransform || "none").toUpperCase()}
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-1 bg-slate-100 p-1 rounded-lg">
+              {[
+                { val: "none", label: "Normal", title: "As typed (Normal)" },
+                { val: "uppercase", label: "UPPER", title: "All uppercase" },
+                { val: "lowercase", label: "lower", title: "All lowercase" },
+                { val: "capitalize", label: "Title", title: "Capitalize Each Word" },
+              ].map(({ val, label, title }) => {
+                const isSelected = (selectedElement.text_transform || selectedElement.textTransform || "none") === val;
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    title={title}
+                    onClick={() => updateTextProperties({ text_transform: val, textTransform: val })}
+                    className={`py-1 text-xs font-semibold rounded transition-all flex items-center justify-center ${
+                      isSelected
+                        ? "bg-white text-teal-600 shadow font-bold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -1821,6 +2151,18 @@ const PropertiesPanel = ({
             )}
           </div>
 
+          {/* 4-Sided Border & 4-Sided Padding for Text */}
+          <FourSidedBorderControl
+            border={selectedElement.border}
+            onChange={(border) => updateTextProperties({ border })}
+            showRadius={true}
+          />
+
+          <FourSidedPaddingControl
+            padding={selectedElement.padding}
+            onChange={(padding) => updateTextProperties({ padding })}
+          />
+
           {/* Customer Editable Settings */}
           <div className="p-3 bg-teal-50/60 rounded-xl border border-teal-200">
             <div className="flex items-center justify-between mb-1">
@@ -2025,7 +2367,11 @@ const PropertiesPanel = ({
               step={0.5}
               addonAfter="%"
               disabled={selectedElement.type === "text"}
-              value={selectedElement.width_pct !== undefined ? selectedElement.width_pct : (selectedElement.width ? Number((selectedElement.width / 10).toFixed(1)) : 80)}
+              value={
+                selectedElement.type === "text"
+                  ? getElementCoords(selectedElement).width
+                  : (selectedElement.width_pct !== undefined ? selectedElement.width_pct : (selectedElement.width ? Number((selectedElement.width / 10).toFixed(1)) : 80))
+              }
               onChange={(val) => {
                 const wPct = Number((val || 1).toFixed(2));
                 const is1to1Shape =
@@ -2069,9 +2415,13 @@ const PropertiesPanel = ({
                 selectedElement.type === "text" ||
                 (selectedElement.type === "photo_frame" && ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape))
               }
-              value={selectedElement.type === "photo_frame" && ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape)
-                ? (selectedElement.width_pct !== undefined ? selectedElement.width_pct : (selectedElement.width ? Number((selectedElement.width / 10).toFixed(1)) : 80))
-                : (selectedElement.height_pct !== undefined ? selectedElement.height_pct : (selectedElement.height ? Number((selectedElement.height / 10).toFixed(1)) : 80))}
+              value={
+                selectedElement.type === "text"
+                  ? getElementCoords(selectedElement).height
+                  : (selectedElement.type === "photo_frame" && ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape)
+                    ? (selectedElement.width_pct !== undefined ? selectedElement.width_pct : (selectedElement.width ? Number((selectedElement.width / 10).toFixed(1)) : 80))
+                    : (selectedElement.height_pct !== undefined ? selectedElement.height_pct : (selectedElement.height ? Number((selectedElement.height / 10).toFixed(1)) : 80)))
+              }
               onChange={(val) => {
                 const hPct = Number((val || 1).toFixed(2));
                 onUpdateElement(id, {

@@ -27,7 +27,7 @@ const PageFilmstrip = ({
   const [draggedIdx, setDraggedIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
 
-  const getRuleBadge = (page) => {
+  const getRuleBadge = (page, idx) => {
     if (page.page_type === "front_cover") {
       return <Tag color="purple" className="m-0 text-[10px] font-semibold">Front Cover</Tag>;
     }
@@ -38,40 +38,49 @@ const PageFilmstrip = ({
       return <Tag color="default" className="m-0 text-[10px] font-semibold">Blank Page</Tag>;
     }
 
+    let interiorNum = 0;
+    for (let k = 0; k <= idx; k++) {
+      if (pages[k]?.page_type === "interior") interiorNum++;
+    }
+
     const rule = page.targeting_rule?.rule_type;
     switch (rule) {
       case "exact_page":
         return (
           <Tag color="blue" className="m-0 text-[10px] font-semibold">
-            Page {page.targeting_rule?.page_number || 1} Only
+            Page {page.targeting_rule?.page_number || interiorNum} Only
           </Tag>
         );
       case "odd_interior":
         return <Tag color="cyan" className="m-0 text-[10px] font-semibold">Odd Pages</Tag>;
       case "even_interior":
         return <Tag color="geekblue" className="m-0 text-[10px] font-semibold">Even Pages</Tag>;
-      case "all_interior":
-        return <Tag color="green" className="m-0 text-[10px] font-semibold">All Interior</Tag>;
-      case "all_pages":
-        return <Tag color="gold" className="m-0 text-[10px] font-semibold">All Pages</Tag>;
       default:
-        return <Tag className="m-0 text-[10px]">Interior</Tag>;
+        return (
+          <Tag color="blue" className="m-0 text-[10px] font-semibold">
+            Page {interiorNum} Only
+          </Tag>
+        );
     }
   };
 
-  // Rule exclusivity check for the active page
+  // Rule exclusivity check for the active page (interior pages only)
   const otherPages = pages.filter((_, idx) => idx !== activePageIndex);
-  const isOddInUse = otherPages.some((p) => p.targeting_rule?.rule_type === "odd_interior");
-  const isEvenInUse = otherPages.some((p) => p.targeting_rule?.rule_type === "even_interior");
-  const isAllInteriorInUse = otherPages.some((p) => p.targeting_rule?.rule_type === "all_interior");
+  const isOddInUse = otherPages.some((p) => p.page_type === "interior" && p.targeting_rule?.rule_type === "odd_interior");
+  const isEvenInUse = otherPages.some((p) => p.page_type === "interior" && p.targeting_rule?.rule_type === "even_interior");
+  const isAllInteriorInUse = otherPages.some((p) => p.page_type === "interior" && p.targeting_rule?.rule_type === "all_interior");
 
-  const currentPageNum = pages[activePageIndex]?.targeting_rule?.page_number;
+  const currentPage = pages[activePageIndex];
+  const isCurrentInterior = currentPage?.page_type === "interior";
+  const currentPageNum = Number(currentPage?.targeting_rule?.page_number);
   const isPageNumConflict =
-    pages[activePageIndex]?.targeting_rule?.rule_type === "exact_page" &&
+    isCurrentInterior &&
+    currentPage?.targeting_rule?.rule_type === "exact_page" &&
     otherPages.some(
       (p) =>
+        p.page_type === "interior" &&
         p.targeting_rule?.rule_type === "exact_page" &&
-        p.targeting_rule?.page_number === currentPageNum
+        Number(p.targeting_rule?.page_number) === currentPageNum
     );
 
   // Drag and Drop Handlers with Photobook Rule Enforcement
@@ -112,7 +121,7 @@ const PageFilmstrip = ({
       return;
     }
     if (targetIdx === 0 && sourcePage?.page_type !== "front_cover") {
-      message.warning("Rule: Front Cover must always be page 1! Interior pages cannot precede Front Cover.");
+      message.warning("Rule: Front Cover must always be the first page! Interior pages cannot precede Front Cover.");
       return;
     }
 
@@ -143,7 +152,17 @@ const PageFilmstrip = ({
             </span>
           </div>
           <span className="text-[11px] text-slate-500 font-medium bg-slate-200/80 px-2 py-0.5 rounded-full">
-            Active: {pages[activePageIndex]?.name || `Page ${activePageIndex + 1}`}
+            Active: {(() => {
+              const curP = pages[activePageIndex];
+              if (!curP) return "Page";
+              if (curP.page_type === "front_cover") return "Front Cover";
+              if (curP.page_type === "back_cover") return "Back Cover";
+              let interiorNum = 0;
+              for (let k = 0; k <= activePageIndex; k++) {
+                if (pages[k]?.page_type === "interior") interiorNum++;
+              }
+              return `Page ${interiorNum}`;
+            })()}
           </span>
 
           {/* Blank Page Toggle Button */}
@@ -195,9 +214,18 @@ const PageFilmstrip = ({
                   message.warning("All Interior rule is already in use on another page!");
                   return;
                 }
+                let nextNum = pages[activePageIndex]?.targeting_rule?.page_number;
+                if (rule_type === "exact_page") {
+                  let interiorIdx = 1;
+                  for (let i = 0; i < activePageIndex; i++) {
+                    if (pages[i]?.page_type === "interior") interiorIdx++;
+                  }
+                  nextNum = interiorIdx;
+                }
                 onUpdatePageRule(activePageIndex, {
                   ...pages[activePageIndex].targeting_rule,
                   rule_type,
+                  page_number: nextNum,
                 });
               }}
               options={[
@@ -288,7 +316,7 @@ const PageFilmstrip = ({
         <div className="flex items-center gap-1.5">
           <MdInfoOutline className="text-sky-600" size={13} />
           <span>
-            <strong>Photobook Rules:</strong> Drag cards to reorder. <strong>Front Cover</strong> must be page 1; <strong>Back Cover</strong> must be last page. Odd/Even rules are strictly unique.
+            <strong>Photobook Sequence:</strong> Drag cards to reorder. <strong>Front Cover</strong> is always first; <strong>Back Cover</strong> is always last. Interior pages are sequentially numbered P1, P2... Odd/Even rules are strictly unique.
           </span>
         </div>
         <span className="text-[10px] text-slate-400 font-medium">
@@ -303,17 +331,29 @@ const PageFilmstrip = ({
           const isDragging = idx === draggedIdx;
           const isDragOver = idx === dragOverIdx;
           const bg = p.background || {};
+          const flipH = Boolean(bg.flip_h || bg.flipH);
+          const flipV = Boolean(bg.flip_v || bg.flipV);
+          const transform =
+            flipH && flipV
+              ? "scale(-1, -1)"
+              : flipH
+                ? "scaleX(-1)"
+                : flipV
+                  ? "scaleY(-1)"
+                  : undefined;
           const bgStyle =
             bg.type === "gradient"
-              ? { background: bg.value }
+              ? { background: bg.value, transform, transformOrigin: transform ? "center center" : undefined }
               : bg.type === "image" && bg.value
               ? {
                   backgroundImage: `url(${bg.value})`,
                   backgroundSize: bg.scale && bg.scale > 1 ? `${Math.round(bg.scale * 100)}%` : (bg.fit_mode || "cover"),
                   backgroundPosition: `${bg.position_x ?? 50}% ${bg.position_y ?? 50}%`,
                   backgroundRepeat: "no-repeat",
+                  transform,
+                  transformOrigin: transform ? "center center" : undefined,
                 }
-              : { backgroundColor: bg.value || "#ffffff" };
+              : { backgroundColor: bg.value || "#ffffff", transform, transformOrigin: transform ? "center center" : undefined };
 
           return (
             <React.Fragment key={p.page_id || idx}>
@@ -370,15 +410,35 @@ const PageFilmstrip = ({
                     <MdDragIndicator size={10} />
                   </div>
 
-                  <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/60 text-white px-1 rounded">
-                    {idx + 1}
+                  <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/60 text-white px-1.5 rounded">
+                    {p.page_type === "front_cover"
+                      ? "Cover"
+                      : p.page_type === "back_cover"
+                        ? "Back"
+                        : (() => {
+                            let interiorNum = 0;
+                            for (let k = 0; k <= idx; k++) {
+                              if (pages[k]?.page_type === "interior") interiorNum++;
+                            }
+                            return `P${interiorNum}`;
+                          })()}
                   </span>
                 </div>
 
                 <span className="text-[11px] font-medium text-slate-700 truncate max-w-[100px] mt-1">
-                  {p.name}
+                  {p.page_type === "front_cover"
+                    ? "Front Cover"
+                    : p.page_type === "back_cover"
+                      ? "Back Cover"
+                      : (() => {
+                          let interiorNum = 0;
+                          for (let k = 0; k <= idx; k++) {
+                            if (pages[k]?.page_type === "interior") interiorNum++;
+                          }
+                          return `Page ${interiorNum}`;
+                        })()}
                 </span>
-                <div className="scale-90 origin-top mt-0.5">{getRuleBadge(p)}</div>
+                <div className="scale-90 origin-top mt-0.5">{getRuleBadge(p, idx)}</div>
               </div>
 
               {/* If Blank Page is toggled ON, display visual indicator right after Front Cover (index 0) */}
