@@ -617,11 +617,11 @@ const Orders = () => {
           "delivery_address.pincode",
           ""
         )}`,
-        product_name: _.get(res, "cart_items.product_name", ""),
-        product_quantity: _.get(res, "cart_items.product_quantity", ""),
-        unit_price: _.get(res, "cart_items.product_price", ""),
-        cgst: _.get(res, "cart_items.cgst", ""),
-        sgst: _.get(res, "cart_items.sgst", ""),
+        product_name: _.get(res, "cart_items[0].product_name", _.get(res, "cart_items.product_name", "")),
+        product_quantity: _.get(res, "cart_items[0].quantity", _.get(res, "cart_items[0].product_quantity", _.get(res, "cart_items.quantity", _.get(res, "cart_items.product_quantity", "")))),
+        unit_price: _.get(res, "cart_items[0].price", _.get(res, "cart_items[0].product_price", _.get(res, "cart_items.product_price", ""))),
+        cgst: _.get(res, "cart_items[0].cgst", _.get(res, "cart_items.cgst", "")),
+        sgst: _.get(res, "cart_items[0].sgst", _.get(res, "cart_items.sgst", "")),
         total_price: Math.round(_.get(res, "total_price", 0)),
       };
     });
@@ -1323,13 +1323,13 @@ const Orders = () => {
                       <Col span={6}>
                         <div className="text-xs text-gray-500">Product</div>
                         <div className="text-sm font-medium truncate">
-                          {_.get(order, "cart_items.product_name", "N/A")}
+                          {_.get(order, "cart_items[0].product_name", _.get(order, "cart_items.product_name", "N/A"))}
                         </div>
                       </Col>
                       <Col span={6}>
                         <div className="text-xs text-gray-500">Quantity</div>
                         <div className="text-sm font-medium">
-                          {_.get(order, "cart_items.product_quantity", "N/A")}
+                          {_.get(order, "cart_items[0].quantity") ?? _.get(order, "cart_items[0].product_quantity") ?? _.get(order, "cart_items.quantity") ?? _.get(order, "cart_items.product_quantity") ?? "N/A"}
                         </div>
                       </Col>
                       <Col span={6}>
@@ -1540,7 +1540,7 @@ const Orders = () => {
               <div>
                 <p className="text-sm text-gray-500">Product</p>
                 <p className="font-medium">
-                  {_.get(currentOrder, "cart_items.product_name", "N/A")}
+                  {_.get(currentOrder, "cart_items[0].product_name", _.get(currentOrder, "cart_items.product_name", "N/A"))}
                 </p>
               </div>
               <div>
@@ -1552,7 +1552,7 @@ const Orders = () => {
               <div>
                 <p className="text-sm text-gray-500">Quantity</p>
                 <p className="font-medium">
-                  {_.get(currentOrder, "cart_items.product_quantity", "N/A")}
+                  {_.get(currentOrder, "cart_items[0].quantity") ?? _.get(currentOrder, "cart_items[0].product_quantity") ?? _.get(currentOrder, "cart_items.quantity") ?? _.get(currentOrder, "cart_items.product_quantity") ?? "N/A"}
                 </p>
               </div>
             </div>
@@ -1634,7 +1634,7 @@ const Orders = () => {
                   {currentOrder.invoice_no}
                 </Descriptions.Item>
                 <Descriptions.Item label="Product">
-                  {_.get(currentOrder, "cart_items.product_name", "N/A")}
+                  {_.get(currentOrder, "cart_items[0].product_name", _.get(currentOrder, "cart_items.product_name", "N/A"))}
                 </Descriptions.Item>
                 <Descriptions.Item label="Customer">
                   {_.get(currentOrder, "user_details[0].name", "N/A")}
@@ -1803,7 +1803,7 @@ const Orders = () => {
                   {currentOrder.invoice_no}
                 </Descriptions.Item>
                 <Descriptions.Item label="Product">
-                  {_.get(currentOrder, "cart_items.product_name", "N/A")}
+                  {_.get(currentOrder, "cart_items[0].product_name", _.get(currentOrder, "cart_items.product_name", "N/A"))}
                 </Descriptions.Item>
                 <Descriptions.Item label="Vendor">
                   {currentOrder.assigned_vendor
@@ -1911,23 +1911,65 @@ const Orders = () => {
 
             <Divider />
 
-            <Descriptions title="Product Information" bordered column={2}>
-              <Descriptions.Item label="Product Name">
-                {_.get(currentOrder, "cart_items[0].product_name", "N/A")}
-              </Descriptions.Item>
-              <Descriptions.Item label="Quantity">
-                {_.get(currentOrder, "cart_items[0].product_quantity", "N/A")}
-              </Descriptions.Item>
-              <Descriptions.Item label="Final Price">
-                ₹{_.get(currentOrder, "cart_items[0].final_total", "N/A")}
-              </Descriptions.Item>
-              <Descriptions.Item label="CGST">
-                {_.get(currentOrder, "cart_items[0].cgst", "N/A")}%
-              </Descriptions.Item>
-              <Descriptions.Item label="SGST">
-                {_.get(currentOrder, "cart_items[0].sgst", "N/A")}%
-              </Descriptions.Item>
-            </Descriptions>
+            {Array.isArray(currentOrder?.cart_items) && currentOrder.cart_items.length > 1 ? (
+              currentOrder.cart_items.map((item, idx) => (
+                <div key={idx} className={idx > 0 ? "mt-4" : ""}>
+                  <Descriptions
+                    title={`Product Information (${idx + 1})`}
+                    bordered
+                    column={2}
+                  >
+                    <Descriptions.Item label="Product Name">
+                      {item?.product_name || "N/A"}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Quantity">
+                      <Tag color="blue" className="text-sm font-semibold px-2 py-0.5">
+                        {item?.quantity ?? item?.product_quantity ?? "N/A"}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Final Price">
+                      ₹{item?.final_total ?? item?.price ?? "N/A"}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="CGST">
+                      {item?.cgst != null ? `${item.cgst}%` : "N/A"}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="SGST">
+                      {item?.sgst != null ? `${item.sgst}%` : "N/A"}
+                    </Descriptions.Item>
+                  </Descriptions>
+                </div>
+              ))
+            ) : (
+              <Descriptions title="Product Information" bordered column={2}>
+                <Descriptions.Item label="Product Name">
+                  {_.get(currentOrder, "cart_items[0].product_name") ||
+                    _.get(currentOrder, "cart_items.product_name") ||
+                    "N/A"}
+                </Descriptions.Item>
+                <Descriptions.Item label="Quantity">
+                  <Tag color="blue" className="text-sm font-semibold px-2 py-0.5">
+                    {_.get(currentOrder, "cart_items[0].quantity") ??
+                      _.get(currentOrder, "cart_items[0].product_quantity") ??
+                      _.get(currentOrder, "cart_items.quantity") ??
+                      _.get(currentOrder, "cart_items.product_quantity") ??
+                      "N/A"}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="Final Price">
+                  ₹{_.get(currentOrder, "cart_items[0].final_total") ??
+                    _.get(currentOrder, "cart_items[0].price") ??
+                    _.get(currentOrder, "cart_items.final_total") ??
+                    Math.round(_.get(currentOrder, "total_price", 0)) ??
+                    "N/A"}
+                </Descriptions.Item>
+                <Descriptions.Item label="CGST">
+                  {_.get(currentOrder, "cart_items[0].cgst", "N/A")}%
+                </Descriptions.Item>
+                <Descriptions.Item label="SGST">
+                  {_.get(currentOrder, "cart_items[0].sgst", "N/A")}%
+                </Descriptions.Item>
+              </Descriptions>
+            )}
 
             {(
               _.get(currentOrder, "customized_name") ||
@@ -1939,7 +1981,7 @@ const Orders = () => {
               <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="text-xs text-blue-600 font-semibold uppercase tracking-wider">
-                    Customized Name (Phone Stand)
+                    Customized Name
                   </div>
                   {(_.get(currentOrder, "giveaway_coupon") ||
                     _.get(currentOrder, "coupon.code") ||

@@ -85,9 +85,9 @@ const OrderExplore = () => {
         <div className="flex items-center gap-4">
           <div>
             <h3 className="flex flex-col">
-              <div>{_.get(filterOrderData, "cart_items.category_name", "")}</div>
-              <div>{_.get(filterOrderData, "cart_items.product_name", "")}</div>
-              <div>{_.get(filterOrderData, "cart_items.product_seo_url", "")}</div>
+              <div>{_.get(filterOrderData, "cart_items[0].category_name", _.get(filterOrderData, "cart_items.category_name", ""))}</div>
+              <div>{_.get(filterOrderData, "cart_items[0].product_name", _.get(filterOrderData, "cart_items.product_name", ""))}</div>
+              <div>{_.get(filterOrderData, "cart_items[0].product_seo_url", _.get(filterOrderData, "cart_items.product_seo_url", ""))}</div>
             </h3>
             {(_.get(filterOrderData, "cart_items.customized_name") ||
     _.get(filterOrderData, "cart_items[0].customized_name") ||
@@ -137,7 +137,7 @@ const OrderExplore = () => {
       key: "product_price",
       align: "center",
       render: (price) => {
-        return <div>₹ {_.get(filterOrderData, "cart_items.product_price", "")}</div>;
+        return <div>₹ {_.get(filterOrderData, "cart_items[0].final_total", _.get(filterOrderData, "cart_items[0].price", _.get(filterOrderData, "cart_items.product_price", "")))}</div>;
       },
     },
     {
@@ -146,7 +146,7 @@ const OrderExplore = () => {
       key: "product_price",
       align: "center",
       render: (price) => {
-        return <div className="">{_.get(filterOrderData, "cart_items.product_quantity", "")}</div>;
+        return <div className="">{_.get(filterOrderData, "cart_items[0].quantity", _.get(filterOrderData, "cart_items[0].product_quantity", _.get(filterOrderData, "cart_items.quantity", _.get(filterOrderData, "cart_items.product_quantity", ""))))}</div>;
       },
     },
   ];
@@ -222,7 +222,7 @@ const OrderExplore = () => {
      title: "Quantity",
      value: (
        <h3 className="flex flex-col py-4">
-         <div>{_.get(filterOrderData, "cart_items.product_quantity", "")}</div>
+         <div>{_.get(filterOrderData, "cart_items[0].quantity", _.get(filterOrderData, "cart_items[0].product_quantity", _.get(filterOrderData, "cart_items.quantity", _.get(filterOrderData, "cart_items.product_quantity", ""))))}</div>
        </h3>
      ),
    },

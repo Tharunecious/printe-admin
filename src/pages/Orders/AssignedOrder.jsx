@@ -312,11 +312,11 @@ const AssignedOrder = () => {
           _.get(order, "delivery_address.street_address", ""),
           _.get(order, "delivery_address.pincode", "")
         ].filter(Boolean).join(", ") },
-      { label: "Product Name", value: (order) => _.get(order, "cart_items.product_name", "") },
-      { label: "Quantity", value: (order) => _.get(order, "cart_items.product_quantity", "") },
-      { label: "Unit Price", value: (order) => _.get(order, "cart_items.product_price", 0) },
-      { label: "CGST (%)", value: (order) => _.get(order, "cart_items.cgst", 0) },
-      { label: "SGST (%)", value: (order) => _.get(order, "cart_items.sgst", 0) },
+      { label: "Product Name", value: (order) => _.get(order, "cart_items[0].product_name", _.get(order, "cart_items.product_name", "")) },
+      { label: "Quantity", value: (order) => _.get(order, "cart_items[0].quantity", _.get(order, "cart_items[0].product_quantity", _.get(order, "cart_items.quantity", _.get(order, "cart_items.product_quantity", "")))) },
+      { label: "Unit Price", value: (order) => _.get(order, "cart_items[0].price", _.get(order, "cart_items[0].product_price", _.get(order, "cart_items.product_price", 0))) },
+      { label: "CGST (%)", value: (order) => _.get(order, "cart_items[0].cgst", _.get(order, "cart_items.cgst", 0)) },
+      { label: "SGST (%)", value: (order) => _.get(order, "cart_items[0].sgst", _.get(order, "cart_items.sgst", 0)) },
       { label: "Total Price (₹)", value: "total_price" },
     ];
 

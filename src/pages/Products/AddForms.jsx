@@ -76,10 +76,11 @@ const TAX_PREFERENCE = [
 ];
 
 const GST_PREFERENCE = [
-  { value: "5" },
-  { value: "12" },
-  { value: "18" },
-  { value: "28" },
+  { value: "0", label: "0%" },
+  { value: "5", label: "5%" },
+  { value: "12", label: "12%" },
+  { value: "18", label: "18%" },
+  { value: "28", label: "28%" },
 ];
 
 const PRODUCT_STOCK_TYPE = [{ value: "Limited" }, { value: "Unlimited" }];
@@ -1092,6 +1093,11 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
 
   const [seo_datas, setSEO_Datas] = useState(INITIAL_SEO_DATA);
 
+  // Customization & Design States
+  const [customizationEnabled, setCustomizationEnabled] = useState(false);
+  const [customizationMandatory, setCustomizationMandatory] = useState(false);
+  const [proceedWithDesign, setProceedWithDesign] = useState(true);
+
   // Watched values
   const productTypeSelectedValue = Form.useWatch('type', form) || (id?.type || PRODUCT_TYPE[0].value);
   const customerPrice = Form.useWatch('customer_product_price', form) || 0;
@@ -1102,6 +1108,9 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
   const watchedMRP = Form.useWatch('MRP_price', form) || 0;
   const watchedProductCode = Form.useWatch('product_code', form) || '';
   const watchedProductCodeSNO = Form.useWatch('product_codeS_NO', form) || '';
+
+  const isCustomizationEnabled = Form.useWatch('is_customization_enabled', form);
+  const isCustomizationMandatory = Form.useWatch('is_customization_mandatory', form);
 
   const isPS0511Product =
     String(watchedProductCode).trim().toUpperCase() === "PS0511" ||
@@ -1158,12 +1167,19 @@ const AddForms = ({ fetchData, setFormStatus, id, setId }) => {
         setFilterSubcategory_data(filteredSubcategories);
       }
       
+      setCustomizationEnabled(Boolean(id.is_customization_enabled));
+      setCustomizationMandatory(Boolean(id.is_customization_mandatory));
+      setProceedWithDesign(id.is_proceed_with_design !== false && id.proceed_with_design !== false);
+
       const formValues = {
         ...id,
         vendor_details: _.get(id, "vendor_details._id",""),
         category_details: categoryId,
         sub_category_details: _.get(id, "sub_category_details._id", ""),
         customization_name_price: id.customization_name_price !== undefined ? id.customization_name_price : 10,
+        is_customization_enabled: Boolean(id.is_customization_enabled),
+        is_customization_mandatory: Boolean(id.is_customization_mandatory),
+        is_proceed_with_design: id.is_proceed_with_design !== false && id.proceed_with_design !== false,
         stock_info: [],
       };
 
@@ -2002,6 +2018,12 @@ const handleFinish = async (values) => {
 
     values.seo_url = String(values.seo_url).trim();
     
+    const isCustomEnabled = Boolean(customizationEnabled || form.getFieldValue('is_customization_enabled') || values.is_customization_enabled);
+    const isCustomMandatory = Boolean(customizationMandatory || form.getFieldValue('is_customization_mandatory') || values.is_customization_mandatory);
+    values.is_customization_enabled = isCustomEnabled;
+    values.is_customization_mandatory = isCustomEnabled ? isCustomMandatory : false;
+    values.is_proceed_with_design = proceedWithDesign !== false && form.getFieldValue('is_proceed_with_design') !== false && values.is_proceed_with_design !== false;
+
     if (values.customization_name_price !== undefined && values.customization_name_price !== "") {
       values.customization_name_price = Number(values.customization_name_price);
     } else if (isPS0511Product) {
@@ -2019,6 +2041,9 @@ const handleFinish = async (values) => {
     setFormStatus(false);
     SUCCESS_NOTIFICATION(result);
     form.resetFields();
+    setCustomizationEnabled(false);
+    setCustomizationMandatory(false);
+    setProceedWithDesign(true);
     setId("");
     setQuantityType("");
     setImagePath([]);
@@ -2066,7 +2091,7 @@ const handleFinish = async (values) => {
             </div>
           </div>
 
-      <Form form={form} layout="vertical" onFinish={handleFinish}>
+      <Form form={form} layout="vertical" onFinish={handleFinish} initialValues={{ is_customization_enabled: false, is_customization_mandatory: false, is_proceed_with_design: true }}>
         <Collapse
           defaultActiveKey={["1", "2", "3", "4", "5", "6", "7"]}
           expandIconPosition="end"
@@ -2133,6 +2158,125 @@ const handleFinish = async (values) => {
               </Form.Item>
               </div>
             </div>
+
+            {/* Customization & Design Settings (Not applicable to PS0511 which has its dedicated live flow) */}
+            {!isPS0511Product ? (
+              <div className="mt-4 mb-4 p-4 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 rounded-xl border border-blue-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">✍️</span>
+                  <div>
+                    <h4 className="font-semibold text-gray-800 text-sm m-0">
+                      Product Customization &amp; Design Settings
+                    </h4>
+                    <p className="text-xs text-gray-600 m-0">
+                      Control design file upload and customized name options for this product.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Toggle 1: Proceed with Design */}
+                  <div className="p-3 bg-white rounded-lg border border-gray-200 flex items-center justify-between shadow-sm">
+                    <div>
+                      <div className="font-medium text-sm text-gray-800">
+                        Proceed with Design
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Show image/design upload UI for customer
+                      </div>
+                    </div>
+                    <Switch
+                      checked={proceedWithDesign}
+                      checkedChildren="ON"
+                      unCheckedChildren="OFF"
+                      onChange={(checked) => {
+                        setProceedWithDesign(checked);
+                        form.setFieldsValue({ is_proceed_with_design: checked });
+                      }}
+                    />
+                  </div>
+
+                  {/* Toggle 2: Customization Name */}
+                  <div className="p-3 bg-white rounded-lg border border-gray-200 flex items-center justify-between shadow-sm">
+                    <div>
+                      <div className="font-medium text-sm text-gray-800">
+                        Customization Name
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Show customized name input for customer
+                      </div>
+                    </div>
+                    <Switch
+                      checked={customizationEnabled}
+                      checkedChildren="ON"
+                      unCheckedChildren="OFF"
+                      onChange={(checked) => {
+                        setCustomizationEnabled(checked);
+                        form.setFieldsValue({
+                          is_customization_enabled: checked,
+                          ...(!checked ? { is_customization_mandatory: false } : {})
+                        });
+                        if (!checked) {
+                          setCustomizationMandatory(false);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Toggle 3: Mandatory */}
+                  <div
+                    className={`p-3 rounded-lg border flex items-center justify-between shadow-sm transition-all ${
+                      customizationEnabled
+                        ? "bg-white border-gray-200"
+                        : "bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-gray-800">
+                          Mandatory
+                        </span>
+                        {customizationEnabled && (
+                          <span
+                            className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${
+                              customizationMandatory
+                                ? "bg-red-100 text-red-700 border border-red-200"
+                                : "bg-gray-100 text-gray-600 border border-gray-200"
+                            }`}
+                          >
+                            {customizationMandatory ? "Required" : "Optional"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {customizationEnabled
+                          ? (customizationMandatory
+                              ? "Customer must enter name before adding to cart"
+                              : "Optional: customer can choose to leave blank")
+                          : "Enable Customization Name first to activate"}
+                      </div>
+                    </div>
+                    <Switch
+                      disabled={!customizationEnabled}
+                      checked={customizationEnabled && customizationMandatory}
+                      checkedChildren="Yes"
+                      unCheckedChildren="No"
+                      onChange={(checked) => {
+                        setCustomizationMandatory(checked);
+                        form.setFieldsValue({ is_customization_mandatory: checked });
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200 flex items-center gap-2 text-xs text-amber-800">
+                <span>ℹ️</span>
+                <span>
+                  <strong>Phone Stand (PS0511)</strong> uses its dedicated live customization & giveaway logic. See Pricing panel for pricing.
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <Form.Item
                 name="product_codeS_NO"
