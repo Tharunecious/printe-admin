@@ -381,14 +381,22 @@ const PageFilmstrip = ({
                   style={{
                     height: "86px",
                     width: `${Math.max(54, Math.min(140, Math.round(86 * (sizeInfo?.singlePageRatio || 1))))}px`,
-                    ...bgStyle,
+                    backgroundColor: "#ffffff",
                   }}
                 >
+                  {/* Background Layer with flip transform - isolated so it does not flip the sequential number badge */}
+                  <div
+                    className="w-full h-full absolute inset-0 pointer-events-none"
+                    style={{
+                      ...bgStyle,
+                    }}
+                  />
+
                   {/* Miniature elements layout */}
                   {(p.elements || []).map((el, elIdx) => (
                     <div
                       key={elIdx}
-                      className="absolute rounded-[1px]"
+                      className="absolute rounded-[1px] pointer-events-none"
                       style={{
                         left: `${el.x_pct !== undefined ? el.x_pct : (el.x / 1000) * 100}%`,
                         top: `${el.y_pct !== undefined ? el.y_pct : (el.y / 1000) * 100}%`,
@@ -406,11 +414,12 @@ const PageFilmstrip = ({
                   ))}
 
                   {/* Drag Grip Icon */}
-                  <div className="absolute top-1 left-1 bg-black/40 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-1 left-1 bg-black/40 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                     <MdDragIndicator size={10} />
                   </div>
 
-                  <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/60 text-white px-1.5 rounded">
+                  {/* Sequential Number: always bottom-right, straight facing, regardless of background flip */}
+                  <span className="absolute bottom-1 right-1 text-[9px] font-bold bg-black/70 text-white px-1.5 py-0.5 rounded shadow-xs z-10 pointer-events-none select-none">
                     {p.page_type === "front_cover"
                       ? "Cover"
                       : p.page_type === "back_cover"

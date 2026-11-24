@@ -59,6 +59,7 @@ export const calculateDynamicTextDimensions = ({
   canvasHeight = 1000,
   padding = null,
   border = null,
+  bold_px = 0,
 }) => {
   const text = String(content ?? "");
   const numFontSize = Number(fontSize) || 24;
@@ -66,19 +67,24 @@ export const calculateDynamicTextDimensions = ({
   const numCanvasH = Number(canvasHeight) || 1000;
   const numLetterSpacing = Number(letterSpacing) || 0;
   const numLineHeight = Number(lineHeight) || 1.2;
+  const numBoldPx = Number(bold_px || 0);
 
   // Font size rendered on canvas is proportional to 707 standard container width
   const effectiveFontSizePx = (numFontSize * numCanvasW) / 707;
   const effectiveLetterSpacingPx = numLetterSpacing ? (numLetterSpacing * numCanvasW) / 707 : 0;
+  const extraBoldPx = numBoldPx ? (numBoldPx * numCanvasW) / 707 : 0;
+
+  // Normalize all newline formats (\r\n, \r, \n)
+  const cleanText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
   // 1. If there is no letter, width is low (1%)
-  if (!text || text.trim().length === 0) {
+  if (!cleanText || cleanText.trim().length === 0) {
     const pad = parsePaddingValues(padding);
     const bord = parseBorderValues(border);
-    const extraWPx = (pad.left + pad.right) + (bord.left + bord.right);
-    const extraHPx = (pad.top + pad.bottom) + (bord.top + bord.bottom);
+    const extraWPx = (pad.left + pad.right) + (bord.left + bord.right) + (extraBoldPx * 2);
+    const extraHPx = (pad.top + pad.bottom) + (bord.top + bord.bottom) + (extraBoldPx * 2);
     const minWidthPct = Number((((10 + extraWPx) / numCanvasW) * 100).toFixed(2));
-    const minHeightPx = Math.max(16, Math.round(effectiveFontSizePx * 1.2)) + extraHPx;
+    const minHeightPx = Math.max(16, Math.round(effectiveFontSizePx * 1.35)) + extraHPx;
     const minHeightPct = Number(((minHeightPx / numCanvasH) * 100).toFixed(2));
     return {
       width_pct: Math.max(1.0, minWidthPct),
@@ -91,7 +97,7 @@ export const calculateDynamicTextDimensions = ({
   }
 
   // 2. Measure width based on characters typed
-  const lines = text.split("\n");
+  const lines = cleanText.split("\n");
   let maxLineWidthPx = 0;
 
   try {
@@ -130,21 +136,23 @@ export const calculateDynamicTextDimensions = ({
   // Parse element borders and paddings to expand the bounding box accurately
   const pad = parsePaddingValues(padding);
   const bord = parseBorderValues(border);
-  const extraWPx = (pad.left + pad.right) + (bord.left + bord.right);
-  const extraHPx = (pad.top + pad.bottom) + (bord.top + bord.bottom);
+  const extraWPx = (pad.left + pad.right) + (bord.left + bord.right) + (extraBoldPx * 2);
+  const extraHPx = (pad.top + pad.bottom) + (bord.top + bord.bottom) + (extraBoldPx * 2);
 
-  // Add generous breathing room (padding) so cursive / italic letter flourishes don't clip
-  const paddingPx = Math.max(12, Math.round(effectiveFontSizePx * 0.35));
-  const totalWidthPx = maxLineWidthPx + paddingPx + extraWPx;
+  // Add generous breathing room (padding) so cursive / italic letter flourishes and ascenders/descenders don't clip
+  const paddingWPx = Math.max(20, Math.round(effectiveFontSizePx * 0.45));
+  const totalWidthPx = maxLineWidthPx + paddingWPx + extraWPx;
 
   // Convert to % of canvas width
   const calcWidthPct = Number(((totalWidthPx / numCanvasW) * 100).toFixed(2));
   const finalWidthPct = Math.min(100, Math.max(1.0, calcWidthPct));
 
-  // Compute height based on number of lines
+  // Compute height based on number of lines with generous clearance for ascenders, descenders & flourishes
+  const paddingHPx = Math.max(18, Math.round(effectiveFontSizePx * 0.45));
+  const effectiveLineHeight = Math.max(1.3, numLineHeight);
   const totalHeightPx = Math.max(
-    Math.round(lines.length * (effectiveFontSizePx * numLineHeight) + 4) + extraHPx,
-    Math.round(effectiveFontSizePx * 1.2) + extraHPx
+    Math.round(lines.length * (effectiveFontSizePx * effectiveLineHeight) + paddingHPx) + extraHPx,
+    Math.round(effectiveFontSizePx * 1.4 + paddingHPx) + extraHPx
   );
   const calcHeightPct = Number(((totalHeightPx / numCanvasH) * 100).toFixed(2));
   const finalHeightPct = Math.min(100, Math.max(1.0, calcHeightPct));
@@ -259,6 +267,9 @@ export const getElementCoords = (el) => {
       lineHeight: el.line_height,
       canvasWidth: 707,
       canvasHeight: 1000,
+      padding: el.padding,
+      border: el.border,
+      bold_px: el.bold_px ?? el.stroke_width ?? 0,
     });
 
     width = dynamicDims.width_pct;

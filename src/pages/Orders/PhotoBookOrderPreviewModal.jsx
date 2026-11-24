@@ -25,7 +25,11 @@ import {
   parseBorderValues,
   parsePaddingValues,
 } from "../PhotoBook/utils/textUtils";
-import { getShape100Definition } from "../PhotoBook/utils/clipPaths";
+import {
+  getShape100Definition,
+  getShapeClipPathDefinition,
+  is1to1Shape,
+} from "../PhotoBook/utils/clipPaths";
 import { renderShape100 } from "../PhotoBook/Editor/ElementRenderer";
 
 // ── Google Fonts dynamic stylesheet injector ─────────────────────────────────
@@ -70,92 +74,31 @@ const injectGoogleFonts = () => {
   }
 };
 
-// ── SVG Mask / Shape Paths (0.0 to 1.0 objectBoundingBox) ─────────────────────
-const getShapeClipPathDefinition = (shape = "rectangle", radiusVal = 0) => {
-  const normShape = String(shape || "rectangle").toLowerCase().replace(/[^a-z0-9_-]/g, "");
-  switch (normShape) {
-    case "circle":
-    case "round":
-      return { type: "circle", cx: "0.5", cy: "0.5", r: "0.5" };
-    case "oval":
-    case "ellipse":
-      return { type: "ellipse", cx: "0.5", cy: "0.5", rx: "0.5", ry: "0.38" };
-    case "rounded_rectangle":
-    case "rounded_rect":
-    case "rounded":
-      return {
-        type: "rect",
-        x: "0",
-        y: "0",
-        width: "1",
-        height: "1",
-        rx: (radiusVal / 100).toFixed(3),
-        ry: (radiusVal / 100).toFixed(3),
-      };
-    case "heart":
-      return {
-        type: "path",
-        d: "M 0.5,1 C 0.08,0.66 0,0.43 0,0.28 C 0,0.11 0.12,0 0.27,0 C 0.38,0 0.46,0.07 0.5,0.18 C 0.54,0.07 0.62,0 0.73,0 C 0.88,0 1,0.11 1,0.28 C 1,0.43 0.92,0.66 0.5,1 Z",
-      };
-    case "star":
-      return {
-        type: "polygon",
-        points: "0.5,0 0.63,0.36 1,0.38 0.72,0.63 0.81,1 0.5,0.79 0.19,1 0.28,0.63 0,0.38 0.37,0.36",
-      };
-    case "hexagon":
-      return {
-        type: "polygon",
-        points: "0.5,0 1,0.25 1,0.75 0.5,1 0,0.75 0,0.25",
-      };
-    case "scallop":
-      return {
-        type: "path",
-        d: "M 0.5,0.05 C 0.58,0 0.68,0.03 0.72,0.1 C 0.77,0.08 0.86,0.12 0.88,0.18 C 0.94,0.21 0.98,0.3 0.97,0.37 C 1.01,0.43 1,0.52 0.96,0.57 C 1,0.63 0.98,0.72 0.92,0.77 C 0.92,0.84 0.86,0.91 0.79,0.92 C 0.76,0.98 0.68,1 0.61,0.98 C 0.56,1.02 0.46,1.02 0.41,0.98 C 0.34,1 0.26,0.98 0.23,0.92 C 0.16,0.91 0.1,0.84 0.1,0.77 C 0.04,0.72 0.02,0.63 0.06,0.57 C 0.02,0.52 0.01,0.43 0.05,0.37 C 0.04,0.3 0.08,0.21 0.14,0.18 C 0.16,0.12 0.25,0.08 0.3,0.1 C 0.34,0.03 0.44,0 0.5,0.05 Z",
-      };
-    case "arch":
-      return {
-        type: "path",
-        d: "M 0,1 L 0,0.45 C 0,0.2 0.22,0 0.5,0 C 0.78,0 1,0.2 1,0.45 L 1,1 Z",
-      };
-    case "rectangle":
-    case "rect":
-    default: {
-      const rx = radiusVal > 0 ? (Number(radiusVal) / 100).toFixed(3) : "0";
-      return {
-        type: "rect",
-        x: "0",
-        y: "0",
-        width: "1",
-        height: "1",
-        rx,
-        ry: rx,
-      };
-    }
-  }
-};
-
+// ── Render SVG Clip & Border for arbitrary shapes ─────────────────────────────
 const renderShapeSvgClip = (def) => {
   if (!def) return <rect x="0" y="0" width="1" height="1" />;
+  const attrs = def.attrs || def;
   if (def.type === "circle") {
-    return <circle cx={def.cx} cy={def.cy} r={def.r} />;
+    return <circle cx={attrs.cx} cy={attrs.cy} r={attrs.r} />;
   }
   if (def.type === "ellipse") {
-    return <ellipse cx={def.cx} cy={def.cy} rx={def.rx} ry={def.ry} />;
+    return <ellipse cx={attrs.cx} cy={attrs.cy} rx={attrs.rx} ry={attrs.ry} />;
   }
   if (def.type === "rect") {
-    return <rect x={def.x} y={def.y} width={def.width} height={def.height} rx={def.rx} ry={def.ry} />;
+    return <rect x={attrs.x || "0"} y={attrs.y || "0"} width={attrs.width || "1"} height={attrs.height || "1"} rx={attrs.rx || "0"} ry={attrs.ry || "0"} />;
   }
   if (def.type === "path") {
-    return <path d={def.d} />;
+    return <path d={attrs.d} />;
   }
   if (def.type === "polygon") {
-    return <polygon points={def.points} />;
+    return <polygon points={attrs.points} />;
   }
   return <rect x="0" y="0" width="1" height="1" />;
 };
 
 const renderShapeSvgBorder = (def, strokeColor, strokeWidthVal) => {
   if (!def || !strokeWidthVal) return null;
+  const attrs = def.attrs || def;
   const strokeStyle = {
     strokeWidth: `calc(${strokeWidthVal} * (100cqw / 707))`,
   };
@@ -166,19 +109,19 @@ const renderShapeSvgBorder = (def, strokeColor, strokeWidthVal) => {
     style: strokeStyle,
   };
   if (def.type === "circle") {
-    return <circle cx={def.cx} cy={def.cy} r={def.r} {...commonProps} />;
+    return <circle cx={attrs.cx} cy={attrs.cy} r={attrs.r} {...commonProps} />;
   }
   if (def.type === "ellipse") {
-    return <ellipse cx={def.cx} cy={def.cy} rx={def.rx} ry={def.ry} {...commonProps} />;
+    return <ellipse cx={attrs.cx} cy={attrs.cy} rx={attrs.rx} ry={attrs.ry} {...commonProps} />;
   }
   if (def.type === "rect") {
-    return <rect x={def.x} y={def.y} width={def.width} height={def.height} rx={def.rx} ry={def.ry} {...commonProps} />;
+    return <rect x={attrs.x || "0"} y={attrs.y || "0"} width={attrs.width || "1"} height={attrs.height || "1"} rx={attrs.rx || "0"} ry={attrs.ry || "0"} {...commonProps} />;
   }
   if (def.type === "path") {
-    return <path d={def.d} {...commonProps} />;
+    return <path d={attrs.d} {...commonProps} />;
   }
   if (def.type === "polygon") {
-    return <polygon points={def.points} {...commonProps} />;
+    return <polygon points={attrs.points} {...commonProps} />;
   }
   return null;
 };
@@ -284,17 +227,15 @@ const PhotobookPageCanvas = ({ page }) => {
 
         const shape = el.shape || el.mask_shape || "rectangle";
         const isCircle = shape === "circle";
-        const is1to1Shape =
-          el.type === "photo_frame" &&
-          ["circle", "heart", "star", "scallop", "hexagon"].includes(shape);
+        const isAspect1to1 = el.type === "photo_frame" && is1to1Shape(shape);
 
         const baseStyle = {
           position: "absolute",
           left: `${leftPct}%`,
           top: `${topPct}%`,
           width: `${widthPct}%`,
-          height: is1to1Shape ? undefined : `${heightPct}%`,
-          aspectRatio: is1to1Shape ? "1 / 1" : undefined,
+          height: isAspect1to1 ? undefined : `${heightPct}%`,
+          aspectRatio: isAspect1to1 ? "1 / 1" : undefined,
           zIndex: el.z_index || 1,
           transform: `rotate(${el.rotation || 0}deg)`,
           transformOrigin: "center center",
@@ -351,7 +292,7 @@ const PhotobookPageCanvas = ({ page }) => {
           const borderSvg = (maxBorder * 100) / elWidth;
           const padVal = Math.max(pad.top || 0, pad.right || 0, pad.bottom || 0, pad.left || 0);
           const padSvg = (padVal * 100) / elWidth;
-          const maskStroke = padSvg > 0 || borderSvg > 0 ? (borderSvg + 2 * padSvg) : 0;
+          const maskStroke = padSvg > 0 ? (borderSvg + 2 * padSvg) : 0;
           const shape100Def = getShape100Definition(shape, radiusVal);
           const maskId = `order-preview-mask-${page.page_id || page.page_number || "pg"}-${elKey}`;
           const elementBg = el.bg_color || el.background?.value;
@@ -409,10 +350,10 @@ const PhotobookPageCanvas = ({ page }) => {
             );
           }
 
-          const totalPadTop = (bord.top !== undefined ? bord.top : bord.width) + (pad.top || 0);
-          const totalPadRight = (bord.right !== undefined ? bord.right : bord.width) + (pad.right || 0);
-          const totalPadBottom = (bord.bottom !== undefined ? bord.bottom : bord.width) + (pad.bottom || 0);
-          const totalPadLeft = (bord.left !== undefined ? bord.left : bord.width) + (pad.left || 0);
+          const totalPadTop = pad.top || 0;
+          const totalPadRight = pad.right || 0;
+          const totalPadBottom = pad.bottom || 0;
+          const totalPadLeft = pad.left || 0;
 
           return (
             <div
@@ -519,8 +460,10 @@ const PhotobookPageCanvas = ({ page }) => {
                 maxWidth: "100%",
                 fontFamily: getFontFamilyFallback(effectiveFontFamily),
                 fontSize: `calc(${Number(el.font_size || 24)} * (100cqw / 707))`,
-                fontWeight: effectiveFontWeight,
+                fontWeight: (el.bold_px || el.stroke_width) ? "normal" : effectiveFontWeight,
                 fontStyle: effectiveFontStyle,
+                WebkitTextStroke: (el.bold_px || el.stroke_width) ? `calc(${Number(el.bold_px || el.stroke_width)} * (100cqw / 707)) ${el.color || "#1f2937"}` : undefined,
+                paintOrder: (el.bold_px || el.stroke_width) ? "stroke fill" : undefined,
                 textTransform: effectiveTextTransform,
                 letterSpacing: effectiveLetterSpacing
                   ? `calc(${Number(effectiveLetterSpacing)} * (100cqw / 707))`

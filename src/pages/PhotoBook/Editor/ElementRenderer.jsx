@@ -1,5 +1,5 @@
 import React from "react";
-import { getShapeClipPathDefinition, getShape100Definition } from "../utils/clipPaths";
+import { getShapeClipPathDefinition, getShape100Definition, is1to1Shape } from "../utils/clipPaths";
 import { PRESET_DECORATIONS, getFontFamilyFallback, dynamicallyLoadGoogleFont } from "../utils/presetAssets";
 import { getElementCoords, parseBorderValues, parsePaddingValues } from "../utils/textUtils";
 import { FaLock, FaImage } from "react-icons/fa";
@@ -124,15 +124,17 @@ const ElementRenderer = ({
         ? `drop-shadow(${shadow.offsetX || 0}px ${shadow.offsetY || 4}px ${shadow.blur}px ${shadow.color || "rgba(0,0,0,0.2)"})`
         : "none";
 
-    const isRect = !element.shape || element.shape === "rectangle";
+    const isRounded = element.shape === "rounded" || element.shape === "rounded_rectangle";
+    const isRect = !element.shape || element.shape === "rectangle" || isRounded;
     const maxBorder = Math.max(bord.top, bord.right, bord.bottom, bord.left, bord.width);
     const cropZoom = element.crop?.zoom || 1;
     const cropOffsetX = element.crop?.offsetX || 0;
     const cropOffsetY = element.crop?.offsetY || 0;
     const cropRotation = element.crop?.rotation || 0;
-    const innerRadius = Math.max(0, bord.radius - Math.min(bord.top, bord.left));
+    const effectiveRadius = bord.radius > 0 ? bord.radius : (isRounded ? 22 : 0);
+    const innerRadius = Math.max(0, effectiveRadius - Math.min(bord.top, bord.left));
 
-    // For rectangle: standard CSS box model works 100% correctly
+    // For rectangle & rounded rectangle: standard CSS box model works 100% correctly
     if (isRect) {
       return (
         <div
@@ -142,7 +144,7 @@ const ElementRenderer = ({
             borderRight: bord.right ? `calc(${bord.right} * (100cqw / 707)) solid ${bord.color}` : undefined,
             borderBottom: bord.bottom ? `calc(${bord.bottom} * (100cqw / 707)) solid ${bord.color}` : undefined,
             borderLeft: bord.left ? `calc(${bord.left} * (100cqw / 707)) solid ${bord.color}` : undefined,
-            borderRadius: bord.radius ? `calc(${bord.radius} * (100cqw / 707))` : undefined,
+            borderRadius: effectiveRadius ? `calc(${effectiveRadius} * (100cqw / 707))` : undefined,
             backgroundColor: element.bg_color || element.background?.value || "transparent",
             filter: shadowFilter,
             boxSizing: "border-box",
@@ -206,10 +208,10 @@ const ElementRenderer = ({
     const shape100Def = getShape100Definition(element.shape || "rectangle", bord.radius || 0);
     const clipId = `clip-${id}`;
     const elementBg = element.bg_color || element.background?.value;
-    const totalPadTop = (bord.top !== undefined ? bord.top : bord.width) + (pad.top || 0);
-    const totalPadRight = (bord.right !== undefined ? bord.right : bord.width) + (pad.right || 0);
-    const totalPadBottom = (bord.bottom !== undefined ? bord.bottom : bord.width) + (pad.bottom || 0);
-    const totalPadLeft = (bord.left !== undefined ? bord.left : bord.width) + (pad.left || 0);
+    const totalPadTop = pad.top || 0;
+    const totalPadRight = pad.right || 0;
+    const totalPadBottom = pad.bottom || 0;
+    const totalPadLeft = pad.left || 0;
 
     return (
       <div
@@ -296,7 +298,7 @@ const ElementRenderer = ({
           <svg
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
-            className="w-full h-full absolute inset-0 select-none overflow-visible pointer-events-none"
+            className="w-full h-full absolute inset-0 select-none overflow-visible pointer-events-none z-10"
           >
             {renderShapeSvgBorder(shape100Def, bord.color, maxBorder)}
           </svg>
@@ -306,13 +308,14 @@ const ElementRenderer = ({
   };
 
   const renderText = () => {
+    const boldStrokePx = Number(element.bold_px ?? element.stroke_width ?? 0);
     return (
       <span
         data-photobook-font="true"
         style={{
           "--photobook-font": effectiveFont,
           fontFamily: effectiveFont,
-          fontWeight: "inherit",
+          fontWeight: boldStrokePx > 0 ? "normal" : (element.font_weight || "normal"),
           fontStyle: "inherit",
           letterSpacing: "inherit",
           textTransform: element.text_transform || element.textTransform || "none",
@@ -322,6 +325,8 @@ const ElementRenderer = ({
           wordBreak: "normal",
           overflowWrap: "normal",
           textAlign: element.align || "center",
+          WebkitTextStroke: boldStrokePx > 0 ? `calc(${boldStrokePx} * (100cqw / 707)) ${element.color || "#1f2937"}` : undefined,
+          paintOrder: boldStrokePx > 0 ? "stroke fill" : undefined,
         }}
       >
         {element.content !== undefined && element.content !== null && String(element.content).trim().length > 0
@@ -388,9 +393,9 @@ const ElementRenderer = ({
   const widthPct = coords.width;
   const heightPct = coords.height;
 
-  const is1to1Shape =
+  const is1to1 =
     type === "photo_frame" &&
-    ["circle", "heart", "star", "scallop", "hexagon"].includes(element.shape || element.mask_shape);
+    is1to1Shape(element.shape || element.mask_shape);
 
   const effectiveFontName = element.font_family || element.fontFamily || "Inter";
   if (type === "text") dynamicallyLoadGoogleFont(effectiveFontName);
@@ -407,15 +412,15 @@ const ElementRenderer = ({
         e.stopPropagation();
         if (!previewMode && onSelect) onSelect(element);
       }}
-      className={`absolute cursor-pointer transition-shadow ${isSelected && !previewMode ? "ring-2 ring-teal-500 shadow-md" : ""
+      className={`absolute cursor-pointer transition-shadow ${isSelected && !previewMode && type !== "text" ? "ring-2 ring-teal-500 shadow-md" : ""
         }`}
       style={{
         left: `${leftPct}%`,
         top: `${topPct}%`,
         width: `${widthPct}%`,
         maxWidth: "100%",
-        height: is1to1Shape ? undefined : `${heightPct}%`,
-        aspectRatio: is1to1Shape ? "1 / 1" : undefined,
+        height: is1to1 ? undefined : `${heightPct}%`,
+        aspectRatio: is1to1 ? "1 / 1" : undefined,
         transform: `rotate(${rotation}deg)`,
         transformOrigin: "center center",
         zIndex: isSelected ? 150 : Math.max(1, Number(z_index) || 1),
@@ -423,13 +428,16 @@ const ElementRenderer = ({
           ? (() => {
             const textBord = parseBorderValues(element.border);
             const textPad = parsePaddingValues(element.padding);
+            const boldStrokePx = Number(element.bold_px ?? element.stroke_width ?? 0);
             return {
               "--photobook-font": effectiveFont,
               fontFamily: effectiveFont,
               textTransform: element.text_transform || element.textTransform || "none",
               fontSize: `calc(${Number(element.font_size || 24)} * (100cqw / 707))`,
-              fontWeight: element.font_weight || "normal",
+              fontWeight: boldStrokePx > 0 ? "normal" : (element.font_weight || "normal"),
               fontStyle: element.font_style || "normal",
+              WebkitTextStroke: boldStrokePx > 0 ? `calc(${boldStrokePx} * (100cqw / 707)) ${element.color || "#1f2937"}` : undefined,
+              paintOrder: boldStrokePx > 0 ? "stroke fill" : undefined,
               letterSpacing: element.letter_spacing ? `calc(${Number(element.letter_spacing)} * (100cqw / 707))` : "normal",
               lineHeight: element.line_height || 1.2,
               color: element.color || "#1f2937",

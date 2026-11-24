@@ -63,6 +63,7 @@ import {
   getCleanSizeName,
 } from "../utils/sizeUtils";
 import { calculateDynamicTextDimensions, normalizeElementToPaperCoords, getElementCoords } from "../utils/textUtils";
+import { is1to1Shape } from "../utils/clipPaths";
 
 const parseSizeToAspectRatio = (sizeStr) => {
   if (!sizeStr) return "1:1";
@@ -805,7 +806,7 @@ const PhotoBookEditor = () => {
   const handleAddPhotoFrame = (shape = "rectangle", testImageUrl = "") => {
     const frameCount =
       currentElements.filter((el) => el.type === "photo_frame").length + 1;
-    const is1to1Shape = ["circle", "heart", "star", "scallop", "hexagon"].includes(shape);
+    const is1to1 = is1to1Shape(shape);
 
     const dims = getCanvasDimensionsForSize(currentSizeInfo, productData?.photobook_config?.sizes || []);
     const canvasW = dims.width || 707;
@@ -814,7 +815,7 @@ const PhotoBookEditor = () => {
     let width_pct = 50;
     let height_pct = 50;
 
-    if (is1to1Shape) {
+    if (is1to1) {
       width_pct = 45;
       // Height % focuses on width % value so height in pixels === width in pixels
       height_pct = Number((width_pct * (canvasW / canvasH)).toFixed(2));
@@ -824,7 +825,7 @@ const PhotoBookEditor = () => {
     const y_pct = Number(((100 - height_pct) / 2).toFixed(2));
 
     const pixelW = Math.round((width_pct / 100) * canvasW);
-    const pixelH = is1to1Shape ? pixelW : Math.round((height_pct / 100) * canvasH);
+    const pixelH = is1to1 ? pixelW : Math.round((height_pct / 100) * canvasH);
 
     const newElement = {
       id: uuidv4(),
@@ -863,7 +864,8 @@ const PhotoBookEditor = () => {
     const textContent = customProps.content !== undefined ? customProps.content : "Heading";
     const fontSize = customProps.font_size || 32;
     const fontFamily = customProps.font_family || "Inter";
-    const fontWeight = customProps.font_weight || "bold";
+    const boldPx = customProps.bold_px !== undefined ? customProps.bold_px : (customProps.font_weight === "bold" ? 0.4 : 0);
+    const fontWeight = boldPx > 0 ? "normal" : (customProps.font_weight || "normal");
     const fontStyle = customProps.font_style || "normal";
     const color = customProps.color || "#1f2937";
 
@@ -879,6 +881,7 @@ const PhotoBookEditor = () => {
       fontStyle,
       canvasWidth: canvasW,
       canvasHeight: canvasH,
+      bold_px: boldPx,
     });
 
     const width_pct = textDims.width_pct;
@@ -895,6 +898,8 @@ const PhotoBookEditor = () => {
       font_size_rem: `${(fontSize / 16).toFixed(2)}rem`,
       font_size_cqmin: `${(fontSize / 10).toFixed(2)}cqmin`,
       font_weight: fontWeight,
+      bold_px: boldPx,
+      stroke_width: boldPx,
       font_style: fontStyle,
       color: color,
       align: "center",
@@ -1245,20 +1250,14 @@ const PhotoBookEditor = () => {
     const nextRule = "exact_page";
     const nextNum = interiorIndex;
 
-    // In photobook sequence, layout elements stay at the same point across interior pages
-    const masterInterior = interiorPages[0];
-    const initialElements = (masterInterior?.elements || []).map((el) => ({
-      ...el,
-      id: uuidv4(),
-    }));
-
+    // A newly created page is completely empty without any default design or template elements
     const newPage = {
       page_id: uuidv4(),
       name: `Page ${interiorIndex}`,
       page_type: pageType,
       targeting_rule: { rule_type: nextRule, page_number: nextNum },
       background: { type: "color", value: "#ffffff", opacity: 1 },
-      elements: initialElements,
+      elements: [],
     };
     setTemplate((prev) => {
       const updatedPages = [...prev.pages, newPage];

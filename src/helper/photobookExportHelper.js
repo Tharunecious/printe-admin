@@ -379,6 +379,28 @@ const getCanvasShapePath = (shape, w, h, cornerRadius = 0) => {
     return p;
   }
 
+  if (normShape === "capsule" || normShape === "pill") {
+    const p = new Path2D();
+    const r = Math.min(w, h) / 2;
+    if (typeof p.roundRect === "function") {
+      p.roundRect(0, 0, w, h, r);
+    } else {
+      p.rect(0, 0, w, h);
+    }
+    return p;
+  }
+
+  if (normShape === "rounded" || normShape === "rounded_rectangle") {
+    const p = new Path2D();
+    const r = cornerRadius > 0 ? cornerRadius : Math.min(w, h) * 0.18;
+    if (typeof p.roundRect === "function") {
+      p.roundRect(0, 0, w, h, r);
+    } else {
+      p.rect(0, 0, w, h);
+    }
+    return p;
+  }
+
   if (normShape === "rectangle" || normShape === "rect" || !normShape) {
     const p = new Path2D();
     if (cornerRadius > 0 && typeof p.roundRect === "function") {
@@ -403,15 +425,43 @@ const getCanvasShapePath = (shape, w, h, cornerRadius = 0) => {
 
   let d = "";
   if (normShape === "heart") {
-    d = "M 0.5,0.88 C 0.08,0.58 0,0.38 0,0.25 C 0,0.1 0.12,0 0.27,0 C 0.38,0 0.46,0.06 0.5,0.16 C 0.54,0.06 0.62,0 0.73,0 C 0.88,0 1,0.1 1,0.25 C 1,0.38 0.92,0.58 0.5,0.88 Z";
+    d = "M 0.5,1 C 0.08,0.66 0,0.43 0,0.28 C 0,0.11 0.12,0 0.27,0 C 0.38,0 0.46,0.07 0.5,0.18 C 0.54,0.07 0.62,0 0.73,0 C 0.88,0 1,0.11 1,0.28 C 1,0.43 0.92,0.66 0.5,1 Z";
   } else if (normShape === "star") {
-    d = polygonPointsToSvgPath("0.5,0.02 0.63,0.36 0.98,0.38 0.71,0.61 0.79,0.96 0.5,0.77 0.21,0.96 0.29,0.61 0.02,0.38 0.37,0.36");
+    d = polygonPointsToSvgPath("0.5,0 0.63,0.36 1,0.38 0.72,0.63 0.81,1 0.5,0.79 0.19,1 0.28,0.63 0,0.38 0.37,0.36");
+  } else if (normShape === "star8" || normShape === "sparkle") {
+    d = polygonPointsToSvgPath("0.5,0 0.62,0.32 0.85,0.15 0.68,0.38 1,0.5 0.68,0.62 0.85,0.85 0.62,0.68 0.5,1 0.38,0.68 0.15,0.85 0.32,0.62 0,0.5 0.32,0.38 0.15,0.15 0.38,0.32");
+  } else if (normShape === "diamond" || normShape === "rhombus") {
+    d = polygonPointsToSvgPath("0.5,0 1,0.5 0.5,1 0,0.5");
+  } else if (normShape === "triangle") {
+    d = polygonPointsToSvgPath("0.5,0 1,1 0,1");
+  } else if (normShape === "pentagon") {
+    d = polygonPointsToSvgPath("0.5,0 1,0.38 0.81,1 0.19,1 0,0.38");
   } else if (normShape === "hexagon") {
-    d = polygonPointsToSvgPath("0.5,0.02 0.95,0.26 0.95,0.74 0.5,0.98 0.05,0.74 0.05,0.26");
+    d = polygonPointsToSvgPath("0.5,0 1,0.25 1,0.75 0.5,1 0,0.75 0,0.25");
+  } else if (normShape === "octagon") {
+    d = polygonPointsToSvgPath("0.29,0 0.71,0 1,0.29 1,0.71 0.71,1 0.29,1 0,0.71 0,0.29");
   } else if (normShape === "arch") {
     d = "M 0,1 L 0,0.45 C 0,0.2 0.22,0 0.5,0 C 0.78,0 1,0.2 1,0.45 L 1,1 Z";
+  } else if (normShape === "shield") {
+    d = "M 0,0 L 1,0 L 1,0.55 C 1,0.82 0.5,1 0.5,1 C 0.5,1 0,0.82 0,0.55 Z";
+  } else if (normShape === "clover" || normShape === "quatrefoil") {
+    d = "M 0.5,0.15 C 0.38,0 0.12,0 0.12,0.25 C 0.12,0.38 0,0.38 0,0.5 C 0,0.62 0.12,0.62 0.12,0.75 C 0.12,1 0.38,1 0.5,0.85 C 0.62,1 0.88,1 0.88,0.75 C 0.88,0.62 1,0.62 1,0.5 C 1,0.38 0.88,0.38 0.88,0.25 C 0.88,0 0.62,0 0.5,0.15 Z";
   } else if (normShape === "scallop") {
     d = "M 0.5,0.05 C 0.58,0 0.68,0.03 0.72,0.1 C 0.77,0.08 0.86,0.12 0.88,0.18 C 0.94,0.21 0.98,0.3 0.97,0.37 C 1.01,0.43 1,0.52 0.96,0.57 C 1,0.63 0.98,0.72 0.92,0.77 C 0.92,0.84 0.86,0.91 0.79,0.92 C 0.76,0.98 0.68,1 0.61,0.98 C 0.56,1.02 0.46,1.02 0.41,0.98 C 0.34,1 0.26,0.98 0.23,0.92 C 0.16,0.91 0.1,0.84 0.1,0.77 C 0.04,0.72 0.02,0.63 0.06,0.57 C 0.02,0.52 0.01,0.43 0.05,0.37 C 0.04,0.3 0.08,0.21 0.14,0.18 C 0.16,0.12 0.25,0.08 0.3,0.1 C 0.34,0.03 0.44,0 0.5,0.05 Z";
+  } else if (normShape === "flower") {
+    d = "M 0.5,0.2 C 0.55,0.05 0.65,0.05 0.7,0.2 C 0.85,0.15 0.95,0.25 0.9,0.4 C 1.05,0.45 1.05,0.55 0.9,0.6 C 0.95,0.75 0.85,0.85 0.7,0.8 C 0.65,0.95 0.55,0.95 0.5,0.8 C 0.35,0.85 0.25,0.75 0.3,0.6 C 0.15,0.55 0.15,0.45 0.3,0.4 C 0.25,0.25 0.35,0.15 0.5,0.2 Z";
+  } else if (normShape === "leaf") {
+    d = "M 0.05,0.05 C 0.45,0.05 0.95,0.45 0.95,0.95 C 0.55,0.95 0.05,0.55 0.05,0.05 Z";
+  } else if (normShape === "cloud") {
+    d = "M 0.2,0.85 C 0.08,0.85 0,0.74 0,0.61 C 0,0.49 0.07,0.39 0.18,0.36 C 0.2,0.17 0.35,0.05 0.52,0.05 C 0.68,0.05 0.81,0.16 0.85,0.31 C 0.94,0.33 1,0.42 1,0.53 C 1,0.65 0.92,0.75 0.81,0.77 C 0.8,0.83 0.74,0.85 0.68,0.85 Z";
+  } else if (normShape === "ticket") {
+    d = "M 0,0.15 C 0.1,0.15 0.15,0.1 0.15,0 L 0.85,0 C 0.85,0.1 0.9,0.15 1,0.15 L 1,0.85 C 0.9,0.85 0.85,0.9 0.85,1 L 0.15,1 C 0.15,0.9 0.1,0.85 0,0.85 Z";
+  } else if (normShape === "stamp") {
+    d = "M 0.06,0.06 Q 0.16,-0.02 0.26,0.06 Q 0.38,-0.02 0.50,0.06 Q 0.62,-0.02 0.74,0.06 Q 0.84,-0.02 0.94,0.06 Q 1.02,0.16 0.94,0.26 Q 1.02,0.38 0.94,0.50 Q 1.02,0.62 0.94,0.74 Q 1.02,0.84 0.94,0.94 Q 0.84,1.02 0.74,0.94 Q 0.62,1.02 0.50,0.94 Q 0.38,1.02 0.26,0.94 Q 0.16,1.02 0.06,0.94 Q -0.02,0.84 0.06,0.74 Q -0.02,0.62 0.06,0.50 Q -0.02,0.38 0.06,0.26 Q -0.02,0.16 0.06,0.06 Z";
+  } else if (normShape === "tag") {
+    d = polygonPointsToSvgPath("0.25,0 0.75,0 1,0.25 1,1 0,1 0,0.25");
+  } else if (normShape === "badge") {
+    d = polygonPointsToSvgPath("0.5,0 0.61,0.08 0.75,0.07 0.82,0.18 0.93,0.25 0.93,0.39 1,0.5 0.93,0.61 0.93,0.75 0.82,0.82 0.75,0.93 0.61,0.93 0.5,1 0.39,0.93 0.25,0.93 0.18,0.82 0.07,0.75 0.07,0.61 0,0.5 0.07,0.39 0.07,0.25 0.18,0.18 0.25,0.07 0.39,0.08");
   }
 
   if (d && typeof Path2D !== "undefined") {
@@ -864,6 +914,16 @@ export const renderPageToCanvas = async (page, { widthPx, heightPx, templateData
         } else {
           ctx.textAlign = "center";
           lineX = widthElPx / 2;
+        }
+        if (el.bold_px || el.stroke_width) {
+          const strokeThickness = (Number(el.bold_px || el.stroke_width) || 0) * scaleFactor;
+          if (strokeThickness > 0) {
+            ctx.lineWidth = strokeThickness;
+            ctx.strokeStyle = el.color || "#1f2937";
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.strokeText(line, lineX, lineY);
+          }
         }
         ctx.fillText(line, lineX, lineY);
       });

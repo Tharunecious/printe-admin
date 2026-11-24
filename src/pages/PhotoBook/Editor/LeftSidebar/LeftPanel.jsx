@@ -354,32 +354,54 @@ const LeftPanel = ({
   // Helper to render SVG graphic of a shape
   const renderShapeIcon = (shapeId) => {
     return (
-      <svg viewBox="0 0 100 100" className="w-12 h-12 fill-sky-100 stroke-sky-600 stroke-[2.5] group-hover:fill-sky-200 group-hover:stroke-sky-700 transition-all">
-        {shapeId === "rectangle" && <rect x="12" y="12" width="76" height="76" rx="4" />}
-        {shapeId === "rounded" && <rect x="12" y="12" width="76" height="76" rx="22" />}
+      <svg viewBox="0 0 100 100" className="w-10 h-10 fill-sky-100 stroke-sky-600 stroke-[2.5] group-hover:fill-sky-200 group-hover:stroke-sky-700 transition-all shrink-0">
+        {shapeId === "rectangle" && <rect x="12" y="18" width="76" height="64" rx="3" />}
+        {shapeId === "rounded" && <rect x="12" y="18" width="76" height="64" rx="16" />}
         {shapeId === "circle" && <circle cx="50" cy="50" r="38" />}
+        {shapeId === "oval" && <ellipse cx="50" cy="50" rx="42" ry="30" />}
+        {shapeId === "capsule" && <rect x="10" y="24" width="80" height="52" rx="26" ry="26" />}
+        {shapeId === "diamond" && <polygon points="50,12 88,50 50,88 12,50" />}
+        {shapeId === "triangle" && <polygon points="50,14 88,86 12,86" />}
+        {shapeId === "pentagon" && <polygon points="50,14 88,42 74,86 26,86 12,42" />}
+        {shapeId === "hexagon" && <polygon points="50,12 86,31 86,69 50,88 14,69 14,31" />}
+        {shapeId === "octagon" && <polygon points="34,12 66,12 88,34 88,66 66,88 34,88 12,66 12,34" />}
         {shapeId === "heart" && (
           <path d="M50 85 C15 55 5 35 15 20 C25 5 45 10 50 30 C55 10 75 5 85 20 C95 35 85 55 50 85 Z" />
         )}
         {shapeId === "star" && (
-          <polygon points="50,5 64,36 98,36 70,57 81,91 50,70 19,91 30,57 2,36 36,36" />
+          <polygon points="50,10 62,38 92,39 68,57 77,86 50,68 23,86 32,57 8,39 38,38" />
         )}
-        {shapeId === "scallop" && <circle cx="50" cy="50" r="38" strokeDasharray="6 3" />}
-        {shapeId === "hexagon" && <polygon points="50,6 92,28 92,72 50,94 8,72 8,28" />}
-        {shapeId === "arch" && <path d="M12 88 L12 48 C12 20 88 20 88 48 L88 88 Z" />}
-        {shapeId === "stamp" && <rect x="12" y="12" width="76" height="76" rx="2" strokeDasharray="4 2" />}
-        {shapeId === "polaroid" && (
-          <>
-            <rect x="12" y="8" width="76" height="84" rx="2" />
-            <rect x="20" y="16" width="60" height="54" />
-          </>
+        {shapeId === "star8" && (
+          <polygon points="50,10 61,34 84,22 72,43 94,50 72,57 84,78 61,66 50,90 39,66 16,78 28,57 6,50 28,43 16,22 39,34" />
         )}
-        {shapeId === "filmstrip" && (
-          <>
-            <rect x="8" y="18" width="84" height="64" rx="3" />
-            <circle cx="18" cy="26" r="3" fill="currentColor" />
-            <circle cx="82" cy="26" r="3" fill="currentColor" />
-          </>
+        {shapeId === "arch" && <path d="M16 86 L16 50 C16 26 84 26 84 50 L84 86 Z" />}
+        {shapeId === "shield" && <path d="M16 16 L84 16 L84 55 C84 76 50 88 50 88 C50 88 16 76 16 55 Z" />}
+        {shapeId === "clover" && (
+          <path d="M 50,22 C 40,8 18,8 18,28 C 18,38 8,38 8,50 C 8,62 18,62 18,72 C 18,92 40,92 50,78 C 60,92 82,92 82,72 C 82,62 92,62 92,50 C 92,38 82,38 82,28 C 82,8 60,8 50,22 Z" />
+        )}
+        {shapeId === "scallop" && (
+          <path d="M 50,14 C 56,10 64,12 68,18 C 72,16 79,19 80,24 C 85,27 88,34 87,40 C 90,45 89,52 86,56 C 89,61 87,68 83,72 C 83,77 78,82 72,83 C 70,88 63,90 58,88 C 54,92 46,92 42,88 C 36,90 29,88 27,83 C 21,82 17,77 17,72 C 12,68 10,61 13,56 C 10,52 9,45 12,40 C 11,34 15,27 19,24 C 21,19 28,16 32,18 C 36,12 44,10 50,14 Z" />
+        )}
+        {shapeId === "flower" && (
+          <path d="M 50,24 C 54,12 62,12 66,24 C 78,20 86,28 82,40 C 94,44 94,52 82,56 C 86,68 78,76 66,72 C 62,84 54,84 50,72 C 46,84 38,84 34,72 C 22,76 14,68 18,56 C 6,52 6,44 18,40 C 14,28 22,20 34,24 C 38,12 46,12 50,24 Z" />
+        )}
+        {shapeId === "leaf" && (
+          <path d="M 16,16 C 46,16 84,46 84,84 C 54,84 16,54 16,16 Z" />
+        )}
+        {shapeId === "cloud" && (
+          <path d="M 28,76 C 18,76 12,66 12,56 C 12,46 18,38 27,35 C 29,20 40,10 54,10 C 66,10 76,19 79,31 C 86,33 91,40 91,49 C 91,59 84,67 75,69 C 74,74 69,76 64,76 Z" />
+        )}
+        {shapeId === "ticket" && (
+          <path d="M 12,25 C 20,25 24,21 24,12 L 76,12 C 76,21 80,25 88,25 L 88,75 C 80,75 76,79 76,88 L 24,88 C 24,79 20,75 12,75 Z" />
+        )}
+        {shapeId === "stamp" && (
+          <path d="M 16,16 Q 24,10 32,16 Q 41,10 50,16 Q 59,10 68,16 Q 76,10 84,16 Q 90,24 84,32 Q 90,41 84,50 Q 90,59 84,68 Q 90,76 84,84 Q 76,90 68,84 Q 59,90 50,84 Q 41,90 32,84 Q 24,90 16,84 Q 10,76 16,68 Q 10,59 16,50 Q 10,41 16,32 Q 10,24 16,16 Z" />
+        )}
+        {shapeId === "tag" && (
+          <polygon points="32,14 68,14 86,34 86,86 14,86 14,34" />
+        )}
+        {shapeId === "badge" && (
+          <polygon points="50,10 59,16 70,16 76,24 84,30 84,41 90,50 84,59 84,70 76,76 70,84 59,84 50,90 41,84 30,84 24,76 16,70 16,59 10,50 16,41 16,30 24,24 30,16 41,16" />
         )}
       </svg>
     );
@@ -439,16 +461,19 @@ const LeftPanel = ({
                 </p>
               </div>
 
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2 pb-6">
               {FRAME_SHAPES.map((shape) => (
                 <button
                   key={shape.id}
                   type="button"
                   onClick={() => onAddPhotoFrame(shape.id)}
-                  className="h-24 bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-400 rounded-xl flex items-center justify-center p-2 transition-all cursor-pointer group shadow-2xs hover:shadow-xs"
+                  className="h-24 bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-400 rounded-xl flex flex-col items-center justify-center p-1.5 transition-all cursor-pointer group shadow-2xs hover:shadow-xs"
                   title={shape.name}
                 >
                   {renderShapeIcon(shape.id)}
+                  <span className="text-[10px] text-slate-500 group-hover:text-sky-700 font-medium mt-1 truncate max-w-full px-1">
+                    {shape.name}
+                  </span>
                 </button>
               ))}
             </div>

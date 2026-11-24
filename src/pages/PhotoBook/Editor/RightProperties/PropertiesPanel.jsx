@@ -11,7 +11,7 @@ import {
   message,
 } from "antd";
 import { uploadImage } from "../../../../api";
-import { FRAME_SHAPES } from "../../utils/clipPaths";
+import { FRAME_SHAPES, is1to1Shape } from "../../utils/clipPaths";
 import { PRESET_FONTS, AVAILABLE_FONTS, SAMPLE_TEST_PHOTOS, getFontFamilyFallback, PRESET_SOLID_COLORS, PRESET_GRADIENTS } from "../../utils/presetAssets";
 import LayersPanel from "../LayersPanel/LayersPanel";
 import {
@@ -1164,7 +1164,7 @@ const PropertiesPanel = ({
               className="w-full"
               value={selectedElement.shape || "rectangle"}
               onChange={(shape) => {
-                const is1to1 = ["circle", "heart", "star", "scallop", "hexagon"].includes(shape);
+                const is1to1 = is1to1Shape(shape);
                 const updates = { shape };
                 if (is1to1) {
                   const wPct = selectedElement.width_pct !== undefined ? selectedElement.width_pct : 50;
@@ -1176,7 +1176,7 @@ const PropertiesPanel = ({
               }}
               options={FRAME_SHAPES.map((s) => ({
                 value: s.id,
-                label: s.name,
+                label: s.category ? `${s.name} (${s.category})` : s.name,
               }))}
             />
           </div>
@@ -1397,13 +1397,39 @@ const PropertiesPanel = ({
           <FourSidedBorderControl
             border={selectedElement.border}
             onChange={(border) => onUpdateElement(id, { border })}
-            showRadius={selectedElement.shape === "rectangle"}
+            showRadius={selectedElement.shape === "rectangle" || selectedElement.shape === "rounded"}
           />
 
           <FourSidedPaddingControl
             padding={selectedElement.padding}
             onChange={(padding) => onUpdateElement(id, { padding })}
           />
+
+          {/* Background / Matting Color behind Photo (Visible in the padding gap between border & element) */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700">Matting / Gap Fill Color</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={selectedElement.bg_color || "#ffffff"}
+                  onChange={(e) => onUpdateElement(id, { bg_color: e.target.value })}
+                  className="w-6 h-6 p-0 rounded border border-slate-300 cursor-pointer"
+                />
+                <button
+                  type="button"
+                  onClick={() => onUpdateElement(id, { bg_color: undefined })}
+                  title="Make gap transparent"
+                  className="text-[10px] text-slate-500 hover:text-slate-700 border border-slate-200 bg-white px-1.5 py-0.5 rounded shadow-2xs"
+                >
+                  Transparent
+                </button>
+              </div>
+            </div>
+            <span className="text-[10px] text-slate-400 block leading-tight">
+              Color showing in the padding gap between the border and photo.
+            </span>
+          </div>
 
           <div className="flex items-center justify-between pt-1">
             <div>
@@ -1444,6 +1470,7 @@ const PropertiesPanel = ({
             canvasHeight: canvasH,
             padding: merged.padding,
             border: merged.border,
+            bold_px: merged.bold_px ?? merged.stroke_width ?? 0,
           });
 
           onUpdateElement(id, {
@@ -1587,7 +1614,13 @@ const PropertiesPanel = ({
                       fontFamily: fontCss,
                       "--photobook-font": fontCss,
                       textTransform: selectedElement.text_transform || selectedElement.textTransform || "none",
-                      fontWeight: selectedElement.font_weight || "normal",
+                      fontWeight: (selectedElement.bold_px || selectedElement.stroke_width)
+                        ? "normal"
+                        : (selectedElement.font_weight || "normal"),
+                      WebkitTextStroke: (selectedElement.bold_px || selectedElement.stroke_width)
+                        ? `${selectedElement.bold_px || selectedElement.stroke_width}px ${textColor}`
+                        : undefined,
+                      paintOrder: (selectedElement.bold_px || selectedElement.stroke_width) ? "stroke fill" : undefined,
                       fontStyle: selectedElement.font_style || "normal",
                       color: textColor,
                       textShadow:
@@ -1656,27 +1689,90 @@ const PropertiesPanel = ({
             </div>
           </div>
 
+          {/* ==================== BOLD / THICKNESS GRADUAL SLIDER & INPUT ==================== */}
+          {(() => {
+            const currentBoldPx =
+              selectedElement.bold_px !== undefined
+                ? Number(selectedElement.bold_px)
+                : selectedElement.stroke_width !== undefined
+                  ? Number(selectedElement.stroke_width)
+                  : selectedElement.font_weight === "bold" || Number(selectedElement.font_weight) >= 700
+                    ? 0.4
+                    : 0;
+
+            const handleBoldChange = (val) => {
+              const num = Math.max(0, Number(val) || 0);
+              updateTextProperties({
+                bold_px: num,
+                stroke_width: num,
+                font_weight: "normal",
+              });
+            };
+
+            return (
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Bold / Thickness
+                  </label>
+                  <span className="text-[11px] text-teal-600 font-mono font-bold bg-white px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+                    {currentBoldPx.toFixed(2)}px
+                  </span>
+                </div>
+
+                {/* Smooth Slider from 0 to 3px with 0.05 step for gradual thickness control */}
+                <Slider
+                  min={0}
+                  max={3}
+                  step={0.05}
+                  value={currentBoldPx}
+                  onChange={handleBoldChange}
+                  className="my-1"
+                />
+
+                <div className="flex items-center gap-2">
+                  <InputNumber
+                    size="small"
+                    min={0}
+                    max={6}
+                    step={0.1}
+                    precision={2}
+                    value={currentBoldPx}
+                    onChange={handleBoldChange}
+                    addonAfter="px"
+                    className="w-28"
+                  />
+                  <div className="flex-1 flex items-center gap-1 overflow-x-auto pb-0.5">
+                    {[
+                      { px: 0, label: "0px" },
+                      { px: 0.1, label: "0.1" },
+                      { px: 0.2, label: "0.2" },
+                      { px: 0.3, label: "0.3" },
+                      { px: 0.5, label: "0.5" },
+                      { px: 0.8, label: "0.8" },
+                      { px: 1.2, label: "1.2" },
+                      { px: 2.0, label: "2.0" },
+                    ].map((preset) => (
+                      <button
+                        key={preset.px}
+                        type="button"
+                        onClick={() => handleBoldChange(preset.px)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-medium transition-all whitespace-nowrap cursor-pointer ${
+                          Math.abs(currentBoldPx - preset.px) < 0.04
+                            ? "bg-teal-600 text-white shadow-xs font-bold"
+                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">
-                Font Weight
-              </label>
-              <Select
-                size="small"
-                className="w-full"
-                value={String(selectedElement.font_weight || "normal")}
-                onChange={(font_weight) => updateTextProperties({ font_weight })}
-                options={[
-                  { value: "300", label: "300 Light" },
-                  { value: "normal", label: "400 Regular" },
-                  { value: "500", label: "500 Medium" },
-                  { value: "600", label: "600 Semi-Bold" },
-                  { value: "bold", label: "700 Bold" },
-                  { value: "800", label: "800 Extra-Bold" },
-                  { value: "900", label: "900 Black" },
-                ]}
-              />
-            </div>
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">
                 Letter Spacing
@@ -1691,9 +1787,6 @@ const PropertiesPanel = ({
                 className="w-full"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">
                 Line Height
@@ -1708,65 +1801,66 @@ const PropertiesPanel = ({
                 className="w-full"
               />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">
-                Italic & Alignment
-              </label>
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateTextProperties({
-                      font_style:
-                        selectedElement.font_style === "italic" ? "normal" : "italic",
-                    })
-                  }
-                  className={`p-1 rounded flex-1 flex justify-center ${
-                    selectedElement.font_style === "italic"
-                      ? "bg-white shadow text-teal-600 italic font-bold"
-                      : "text-slate-600"
-                  }`}
-                  title="Italic"
-                >
-                  <MdFormatItalic size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateTextProperties({ align: "left" })}
-                  className={`p-1 rounded flex-1 flex justify-center ${
-                    selectedElement.align === "left"
-                      ? "bg-white shadow text-teal-600"
-                      : "text-slate-600"
-                  }`}
-                  title="Align Left"
-                >
-                  <MdFormatAlignLeft size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateTextProperties({ align: "center" })}
-                  className={`p-1 rounded flex-1 flex justify-center ${
-                    (selectedElement.align || "center") === "center"
-                      ? "bg-white shadow text-teal-600"
-                      : "text-slate-600"
-                  }`}
-                  title="Align Center"
-                >
-                  <MdFormatAlignCenter size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateTextProperties({ align: "right" })}
-                  className={`p-1 rounded flex-1 flex justify-center ${
-                    selectedElement.align === "right"
-                      ? "bg-white shadow text-teal-600"
-                      : "text-slate-600"
-                  }`}
-                  title="Align Right"
-                >
-                  <MdFormatAlignRight size={14} />
-                </button>
-              </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-700 block mb-1">
+              Italic & Alignment
+            </label>
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              <button
+                type="button"
+                onClick={() =>
+                  updateTextProperties({
+                    font_style:
+                      selectedElement.font_style === "italic" ? "normal" : "italic",
+                  })
+                }
+                className={`p-1 rounded flex-1 flex justify-center ${
+                  selectedElement.font_style === "italic"
+                    ? "bg-white shadow text-teal-600 italic font-bold"
+                    : "text-slate-600"
+                }`}
+                title="Italic"
+              >
+                <MdFormatItalic size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => updateTextProperties({ align: "left" })}
+                className={`p-1 rounded flex-1 flex justify-center ${
+                  selectedElement.align === "left"
+                    ? "bg-white shadow text-teal-600"
+                    : "text-slate-600"
+                }`}
+                title="Align Left"
+              >
+                <MdFormatAlignLeft size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => updateTextProperties({ align: "center" })}
+                className={`p-1 rounded flex-1 flex justify-center ${
+                  (selectedElement.align || "center") === "center"
+                    ? "bg-white shadow text-teal-600"
+                    : "text-slate-600"
+                }`}
+                title="Align Center"
+              >
+                <MdFormatAlignCenter size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => updateTextProperties({ align: "right" })}
+                className={`p-1 rounded flex-1 flex justify-center ${
+                  selectedElement.align === "right"
+                    ? "bg-white shadow text-teal-600"
+                    : "text-slate-600"
+                }`}
+                title="Align Right"
+              >
+                <MdFormatAlignRight size={14} />
+              </button>
             </div>
           </div>
 
@@ -2374,9 +2468,9 @@ const PropertiesPanel = ({
               }
               onChange={(val) => {
                 const wPct = Number((val || 1).toFixed(2));
-                const is1to1Shape =
+                const is1to1 =
                   selectedElement.type === "photo_frame" &&
-                  ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape);
+                  is1to1Shape(selectedElement.shape);
 
                 const updates = {
                   width_pct: wPct,
@@ -2386,7 +2480,7 @@ const PropertiesPanel = ({
                   is_percentage: true,
                 };
 
-                if (is1to1Shape) {
+                if (is1to1) {
                   // Height % strictly focuses on width % value for perfect shape
                   updates.height_pct = wPct;
                   updates.height_str = `${wPct}%`;
@@ -2399,7 +2493,7 @@ const PropertiesPanel = ({
           </div>
           <div>
             <span className="text-slate-500 font-medium block text-[10px]">
-              {selectedElement.type === "photo_frame" && ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape)
+              {selectedElement.type === "photo_frame" && is1to1Shape(selectedElement.shape)
                 ? "HEIGHT (LOCKED 1:1 TO WIDTH)"
                 : selectedElement.type === "text"
                 ? "HEIGHT (AUTO FROM TEXT)"
@@ -2413,12 +2507,12 @@ const PropertiesPanel = ({
               addonAfter="%"
               disabled={
                 selectedElement.type === "text" ||
-                (selectedElement.type === "photo_frame" && ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape))
+                (selectedElement.type === "photo_frame" && is1to1Shape(selectedElement.shape))
               }
               value={
                 selectedElement.type === "text"
                   ? getElementCoords(selectedElement).height
-                  : (selectedElement.type === "photo_frame" && ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape)
+                  : (selectedElement.type === "photo_frame" && is1to1Shape(selectedElement.shape)
                     ? (selectedElement.width_pct !== undefined ? selectedElement.width_pct : (selectedElement.width ? Number((selectedElement.width / 10).toFixed(1)) : 80))
                     : (selectedElement.height_pct !== undefined ? selectedElement.height_pct : (selectedElement.height ? Number((selectedElement.height / 10).toFixed(1)) : 80)))
               }

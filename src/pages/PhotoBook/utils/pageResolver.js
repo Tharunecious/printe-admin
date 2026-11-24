@@ -152,7 +152,7 @@ export const resolveCompleteBook = (template, totalInteriorPages = 20) => {
         ...bgPage,
         page_id: `resolved_page_${i}`,
         page_number: i,
-        elements: masterElements,
+        elements: bgPage?.elements || [],
         background: bgPage?.background,
       },
       resolution: { priority: 1, ruleType: "interior_sequence" },

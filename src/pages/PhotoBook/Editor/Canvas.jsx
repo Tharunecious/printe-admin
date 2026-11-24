@@ -13,6 +13,7 @@ import {
 import { FiRotateCw } from "react-icons/fi";
 import { getCanvasDimensionsForSize } from "../utils/sizeUtils";
 import { calculateDynamicTextDimensions, getElementCoords } from "../utils/textUtils";
+import { is1to1Shape } from "../utils/clipPaths";
 
 const CANVAS_BASE_SIZE = 1000;
 
@@ -124,13 +125,13 @@ const Canvas = ({
   const getElementPxRect = (el) => {
     if (!el) return { x: 0, y: 0, width: 100, height: 100 };
     const coords = getElementCoords(el);
-    const is1to1Shape =
+    const is1to1 =
       el.type === "photo_frame" &&
-      ["circle", "heart", "star", "scallop", "hexagon"].includes(el.shape || el.mask_shape);
+      is1to1Shape(el.shape || el.mask_shape);
     const x = (coords.left / 100) * canvasWidth;
     const y = (coords.top / 100) * canvasHeight;
     const w = (coords.width / 100) * canvasWidth;
-    const h = is1to1Shape ? w : (coords.height / 100) * canvasHeight;
+    const h = is1to1 ? w : (coords.height / 100) * canvasHeight;
     return {
       x: Number(x) || 0,
       y: Number(y) || 0,
@@ -249,9 +250,9 @@ const Canvas = ({
         const deltaY = (e.clientY - activeTransform.startY) / zoom;
 
         const targetEl = elements.find((item) => item.id === activeTransform.elementId);
-        const is1to1Shape =
+        const is1to1ShapeMode =
           targetEl?.type === "photo_frame" &&
-          ["circle", "heart", "star", "scallop", "hexagon"].includes(targetEl?.shape);
+          is1to1Shape(targetEl?.shape);
 
         let { initialX, initialY, initialW, initialH, handle } = activeTransform;
         let newX = initialX;
@@ -272,8 +273,8 @@ const Canvas = ({
           newH = h;
         }
 
-        if (is1to1Shape) {
-          // Circle, Heart, Star, Scalloped Flower must have identical width and height
+        if (is1to1ShapeMode) {
+          // Circle, Heart, Star, etc. must have identical width and height
           const uniformW = Math.max(20, Math.max(newW, newH));
           if (handle.includes("w")) {
             newX = initialX + (initialW - uniformW);
@@ -290,13 +291,13 @@ const Canvas = ({
         const clampedX = Math.max(minCoordX, newX);
         const clampedY = Math.max(minCoordY, newY);
         const clampedW = Math.max(20, newW);
-        const clampedH = is1to1Shape ? clampedW : Math.max(20, newH);
+        const clampedH = is1to1ShapeMode ? clampedW : Math.max(20, newH);
 
         const x_pct = Number(((clampedX / canvasWidth) * 100).toFixed(2));
         const y_pct = Number(((clampedY / canvasHeight) * 100).toFixed(2));
         const width_pct = Number(((clampedW / canvasWidth) * 100).toFixed(2));
         // height % focuses on width % value for 1:1 shapes
-        const height_pct = is1to1Shape
+        const height_pct = is1to1ShapeMode
           ? Number(((clampedW / canvasHeight) * 100).toFixed(2))
           : Number(((clampedH / canvasHeight) * 100).toFixed(2));
 
@@ -480,32 +481,39 @@ const Canvas = ({
 
           {/* Active Selection Overlay & Transform Handles */}
           {selectedElement && !selectedElement.is_hidden && (() => {
-            const is1to1Shape =
+            const is1to1ShapeMode =
               selectedElement.type === "photo_frame" &&
-              ["circle", "heart", "star", "scallop", "hexagon"].includes(selectedElement.shape || selectedElement.mask_shape);
+              is1to1Shape(selectedElement.shape || selectedElement.mask_shape);
+            const isText = selectedElement.type === "text";
 
             const coords = getElementCoords(selectedElement);
-            const leftPct = `${coords.left}%`;
-            const topPct = `${coords.top}%`;
-            const widthPct = `${coords.width}%`;
-            const heightPct = is1to1Shape ? undefined : `${coords.height}%`;
+            // For text elements, surround with generous breathing room (margin) so border & handles never strike through text
+            const offsetPx = isText ? 8 : 0;
+            const leftStyle = offsetPx ? `calc(${coords.left}% - ${offsetPx}px)` : `${coords.left}%`;
+            const topStyle = offsetPx ? `calc(${coords.top}% - ${offsetPx}px)` : `${coords.top}%`;
+            const widthStyle = offsetPx ? `calc(${coords.width}% + ${offsetPx * 2}px)` : `${coords.width}%`;
+            const heightStyle = is1to1ShapeMode
+              ? undefined
+              : offsetPx
+                ? `calc(${coords.height}% + ${offsetPx * 2}px)`
+                : `${coords.height}%`;
 
             return (
               <div
                 className="absolute pointer-events-none"
                 style={{
-                  left: leftPct,
-                  top: topPct,
-                  width: widthPct,
-                  height: heightPct,
-                  aspectRatio: is1to1Shape ? "1 / 1" : undefined,
+                  left: leftStyle,
+                  top: topStyle,
+                  width: widthStyle,
+                  height: heightStyle,
+                  aspectRatio: is1to1ShapeMode ? "1 / 1" : undefined,
                   transform: `rotate(${selectedElement.rotation || 0}deg)`,
                   transformOrigin: "center center",
                   zIndex: 9999,
                 }}
               >
                 {/* Cyan Selection Border */}
-                <div className="absolute inset-0 border-2 border-cyan-400 pointer-events-none shadow-sm" />
+                <div className="absolute inset-0 border-2 border-cyan-400 pointer-events-none shadow-sm rounded-xs" />
 
                 {/* Floating Quick Action Mini Toolbar (Cleanly positioned on top of the top border) */}
                 <div
